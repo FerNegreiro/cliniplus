@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { excluirPaciente } from "@/utils/localCadastro";
+import { deletePaciente } from "@/utils/cliniplusStore";
 
 type PatientDeleteButtonProps = {
-  pacienteId: number;
+  pacienteId: number | string;
   nome: string;
   compact?: boolean;
 };
@@ -18,14 +18,14 @@ export default function PatientDeleteButton({
 
   function handleDelete() {
     const confirmed = window.confirm(
-      `Excluir o paciente ${nome}? Esta ação remove a ficha da lista deste navegador.`
+      `Excluir o paciente ${nome}? Agenda, prontuário, odontograma, orçamentos, financeiro e documentos dele também serão apagados. Essa ação não pode ser desfeita.`
     );
 
     if (!confirmed) {
       return;
     }
 
-    excluirPaciente({ id: pacienteId, nome });
+    deletePaciente(pacienteId);
     router.push("/pacientes");
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import type {
   CliniplusPlanoTratamento,
   PlanoTratamentoItem,
 } from "@/utils/cliniplusStore";
+import { configClinicaPadrao, getConfigClinica, nomeExibicaoProfissional } from "@/utils/cliniplusStore";
 
 type PacientePlanoImpressaoProps = {
   paciente: CliniplusPaciente;
@@ -168,6 +169,10 @@ export default function PacientePlanoImpressao({
   const [includePatientSignature, setIncludePatientSignature] = useState(true);
   const [zoom, setZoom] = useState(0.86);
   const [mensagem, setMensagem] = useState("");
+  const [clinica, setClinica] = useState(configClinicaPadrao);
+  useEffect(() => {
+    setClinica(getConfigClinica());
+  }, []);
   const nascimento = paciente.dataNascimento || paciente.nascimento;
   const idade = getAge(nascimento);
   const genero = paciente.genero || paciente.sexo;
@@ -281,10 +286,12 @@ export default function PacientePlanoImpressao({
                     </div>
                   )}
                   <div className="text-sm font-semibold leading-relaxed text-slate-700">
-                    <p className="font-black text-slate-950">Clinica Sorriso+</p>
-                    <p>Rua das Flores, 123 - Sala 101 - Centro</p>
-                    <p>Sao Paulo/SP - CEP 01234-000</p>
-                    <p>(11) 3456-7890 | contato@clinicasorriso.com.br</p>
+                    <p className="font-black text-slate-950">{clinica.nomeClinica}</p>
+                    {clinica.endereco && <p>{clinica.endereco}</p>}
+                    {(clinica.telefone || clinica.email) && (
+                      <p>{[clinica.telefone, clinica.email].filter(Boolean).join(" | ")}</p>
+                    )}
+                    {clinica.documento && <p>{clinica.documento}</p>}
                   </div>
                 </div>
 
@@ -326,7 +333,7 @@ export default function PacientePlanoImpressao({
                     Profissional responsavel
                   </p>
                   <p className="mt-2 text-lg font-black text-indigo-950">
-                    {planoTratamento.profissional || "Dr. Rafael Oliveira"}
+                    {planoTratamento.profissional || nomeExibicaoProfissional()}
                   </p>
                   <p className="mt-1 font-semibold text-slate-600">
                     CRO 123456/SP
@@ -434,7 +441,7 @@ export default function PacientePlanoImpressao({
                 <div className="text-center text-sm font-semibold text-indigo-950">
                   <div className="mx-auto h-px w-64 bg-indigo-950" />
                   <p className="mt-3 font-black">
-                    {planoTratamento.profissional || "Dr. Rafael Oliveira"}
+                    {planoTratamento.profissional || nomeExibicaoProfissional()}
                   </p>
                   <p>CRO 123456/SP</p>
                 </div>

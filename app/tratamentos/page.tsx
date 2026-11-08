@@ -1,669 +1,312 @@
 "use client";
 
-import Sidebar from "@/components/Sidebar";
-import PremiumCard from "@/components/PremiumCard";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Trash2 } from "lucide-react";
+import Sidebar from "@/components/Sidebar";
 import {
-  getPacienteById,
+  addTratamento,
+  deleteTratamento,
+  getPacientes,
   getTratamentos,
-  type StoreId,
+  updateTratamento,
+  type CliniplusPaciente,
+  type CliniplusTratamento,
 } from "@/utils/cliniplusStore";
+import { formatarDataBr, hojeIso } from "@/utils/datas";
+import { dinheiroParaNumero, formatarMoeda, normalizarTexto } from "@/utils/format";
 
-const tratamentosDemo = [
-  {
-    id: 1,
-    pacienteId: 1,
-    paciente: "Maria Silva",
-    dente: "16",
-    procedimento: "Restauração",
-    status: "Em andamento",
-    progresso: "60%",
-    valor: "R$ 280",
-    proximaSessao: "24/06/2026",
-  },
-  {
-    id: 2,
-    pacienteId: 1,
-    paciente: "Maria Silva",
-    dente: "21",
-    procedimento: "Clareamento",
-    status: "Planejado",
-    progresso: "10%",
-    valor: "R$ 450",
-    proximaSessao: "28/06/2026",
-  },
-  {
-    id: 3,
-    pacienteId: 1,
-    paciente: "Maria Silva",
-    dente: "36",
-    procedimento: "Canal",
-    status: "Urgente",
-    progresso: "25%",
-    valor: "R$ 750",
-    proximaSessao: "22/06/2026",
-  },
-  {
-    id: 4,
-    pacienteId: 4,
-    paciente: "Pedro Lima",
-    dente: "24",
-    procedimento: "Limpeza + Profilaxia",
-    status: "Concluído",
-    progresso: "100%",
-    valor: "R$ 180",
-    proximaSessao: "Concluído",
-  },
-];
+const statusTratamento = ["Planejado", "Em andamento", "Urgente", "Concluído"] as const;
 
-function getStatusClasse(status: string) {
-  if (status === "Urgente") {
-    return "bg-red-100 text-red-700";
-  }
+const classesStatus: Record<string, string> = {
+  planejado: "bg-cyan-100 text-cyan-700",
+  "em andamento": "bg-amber-100 text-amber-700",
+  urgente: "bg-red-100 text-red-700",
+  concluido: "bg-emerald-100 text-emerald-700",
+};
 
-  if (status === "Em andamento") {
-    return "bg-amber-100 text-amber-700";
-  }
-
-  if (status === "Planejado") {
-    return "bg-cyan-100 text-cyan-700";
-  }
-
-  if (status === "Concluído") {
-    return "bg-emerald-100 text-emerald-700";
-  }
-
-  return "bg-slate-100 text-slate-700";
+function statusCanonico(status?: string) {
+  const texto = normalizarTexto(status);
+  if (texto.includes("conclu") || texto.includes("finaliz")) return "Concluído";
+  if (texto.includes("urgent")) return "Urgente";
+  if (texto.includes("andamento") || texto.includes("em tratamento")) return "Em andamento";
+  return "Planejado";
 }
 
-function getBarraClasse(status: string) {
-  if (status === "Urgente") {
-    return "bg-red-500";
-  }
-
-  if (status === "Em andamento") {
-    return "bg-amber-500";
-  }
-
-  if (status === "Planejado") {
-    return "bg-cyan-500";
-  }
-
-  if (status === "Concluído") {
-    return "bg-emerald-500";
-  }
-
-  return "bg-slate-500";
-}
-
-function getLinkPaciente(pacienteId: StoreId) {
-  return `/pacientes/${pacienteId}`;
-}
+const formularioVazio = { pacienteId: "", descricao: "", status: "Planejado", valor: "", data: "" };
 
 export default function Tratamentos() {
-  return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-slate-100 text-sm font-bold text-slate-600">
-          Carregando tratamentos...
-        </main>
-      }
-    >
-      <TratamentosContent />
-    </Suspense>
-  );
-}
-
-function TratamentosContent() {
-  const searchParams = useSearchParams();
-  const pacienteId = searchParams.get("pacienteId") || "";
-  const [atualizacao, setAtualizacao] = useState(0);
+  const [tratamentos, setTratamentos] = useState<CliniplusTratamento[]>([]);
+  const [pacientes, setPacientes] = useState<CliniplusPaciente[]>([]);
+  const [pacienteFiltro, setPacienteFiltro] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState("Todos");
+  const [busca, setBusca] = useState("");
+  const [form, setForm] = useState({ ...formularioVazio, data: hojeIso() });
+  const [mensagem, setMensagem] = useState({ texto: "", erro: false });
 
   useEffect(() => {
-    const atualizar = () => setAtualizacao((valor) => valor + 1);
+    function carregar() {
+      setTratamentos(getTratamentos());
+      setPacientes(getPacientes());
+    }
 
-    window.addEventListener("cliniplus:store", atualizar);
-    window.addEventListener("storage", atualizar);
+    carregar();
+    const daUrl = new URLSearchParams(window.location.search).get("pacienteId");
+    if (daUrl) {
+      setPacienteFiltro(daUrl);
+      setForm((atual) => ({ ...atual, pacienteId: daUrl }));
+    }
 
-    return () => {
-      window.removeEventListener("cliniplus:store", atualizar);
-      window.removeEventListener("storage", atualizar);
-    };
+    window.addEventListener("cliniplus:store", carregar);
+    return () => window.removeEventListener("cliniplus:store", carregar);
   }, []);
 
-  const pacienteIdNumber = pacienteId ? Number(pacienteId) : null;
-
-  const pacienteSelecionado = pacienteIdNumber
-    ? getPacienteById(pacienteIdNumber)
-    : null;
-  const tratamentos = useMemo(
-    () =>
-      getTratamentos().map((tratamento) => {
-        const paciente = getPacienteById(tratamento.pacienteId);
-
-        return {
-          id: tratamento.id,
-          pacienteId: tratamento.pacienteId,
-          paciente: tratamento.paciente || paciente?.nome || "Paciente",
-          dente: "-",
-          procedimento: tratamento.descricao,
-          status: tratamento.status,
-          progresso:
-            tratamento.status === "Concluido" || tratamento.status === "ConcluÃ­do"
-              ? "100%"
-              : tratamento.status === "Em tratamento" ||
-                  tratamento.status === "Em andamento"
-                ? "60%"
-                : "25%",
-          valor: tratamento.valor || "Sem valor",
-          proximaSessao: tratamento.data || "Sem data",
-        };
-      }),
-    [atualizacao]
+  const nomePorPaciente = useMemo(
+    () => new Map(pacientes.map((paciente) => [String(paciente.id), paciente.nome])),
+    [pacientes]
   );
 
-  const tratamentosFiltrados = pacienteIdNumber
-    ? tratamentos.filter(
-        (tratamento) => String(tratamento.pacienteId) === String(pacienteIdNumber)
-      )
-    : tratamentos;
+  const doPaciente = useMemo(
+    () => tratamentos.filter((item) => !pacienteFiltro || String(item.pacienteId) === pacienteFiltro),
+    [pacienteFiltro, tratamentos]
+  );
 
-  const emAndamento = tratamentosFiltrados.filter(
-    (tratamento) => tratamento.status === "Em andamento"
-  ).length;
+  const lista = useMemo(() => {
+    const termo = normalizarTexto(busca);
+    return doPaciente
+      .filter((item) => statusFiltro === "Todos" || statusCanonico(item.status) === statusFiltro)
+      .filter((item) => {
+        if (!termo) return true;
+        const nome = nomePorPaciente.get(String(item.pacienteId)) || item.paciente || "";
+        return normalizarTexto(`${item.descricao} ${nome}`).includes(termo);
+      })
+      .sort((a, b) => (b.data || "").localeCompare(a.data || ""));
+  }, [busca, doPaciente, nomePorPaciente, statusFiltro]);
 
-  const urgentes = tratamentosFiltrados.filter(
-    (tratamento) => tratamento.status === "Urgente"
-  ).length;
+  const contar = (status: string) => doPaciente.filter((item) => statusCanonico(item.status) === status).length;
+  const valorEmAberto = doPaciente
+    .filter((item) => statusCanonico(item.status) !== "Concluído")
+    .reduce((total, item) => total + dinheiroParaNumero(item.valor), 0);
 
-  const concluidos = tratamentosFiltrados.filter(
-    (tratamento) => tratamento.status === "Concluído"
-  ).length;
+  function salvar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!form.pacienteId) return setMensagem({ texto: "Escolha o paciente.", erro: true });
+    if (!form.descricao.trim()) return setMensagem({ texto: "Informe o procedimento.", erro: true });
 
-  const planejados = tratamentosFiltrados.filter(
-    (tratamento) => tratamento.status === "Planejado"
-  ).length;
+    const valor = dinheiroParaNumero(form.valor);
+    addTratamento({
+      pacienteId: form.pacienteId,
+      paciente: nomePorPaciente.get(form.pacienteId),
+      descricao: form.descricao.trim(),
+      status: form.status,
+      valor: valor > 0 ? formatarMoeda(valor) : "",
+      data: form.data || hojeIso(),
+    });
+    setForm({ ...formularioVazio, pacienteId: form.pacienteId, data: hojeIso() });
+    setMensagem({ texto: "Tratamento cadastrado.", erro: false });
+  }
 
-  const nomePaciente = pacienteSelecionado?.nome || "";
-  const pacienteIdQuery = pacienteSelecionado
-    ? String(pacienteSelecionado.id)
-    : "";
+  function excluir(tratamento: CliniplusTratamento) {
+    if (!window.confirm(`Excluir o tratamento "${tratamento.descricao}"?`)) return;
+    deleteTratamento(tratamento.id);
+    setMensagem({ texto: "Tratamento excluído.", erro: false });
+  }
+
+  const campo = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-cyan-400";
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="flex min-h-screen">
         <Sidebar active="Tratamentos" />
 
-        <section className="min-w-0 flex-1 p-6">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <section className="min-w-0 flex-1 p-8">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
             <div>
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                <Link
-                  href="/pacientes"
-                  className="font-semibold hover:text-cyan-700"
-                >
-                  Pacientes
-                </Link>
-
-                {pacienteSelecionado && (
-                  <>
-                    <span>›</span>
-                    <Link
-                      href={getLinkPaciente(pacienteSelecionado.id)}
-                      className="font-semibold hover:text-cyan-700"
-                    >
-                      {pacienteSelecionado.nome}
-                    </Link>
-                  </>
-                )}
-
-                <span>›</span>
-                <span>Tratamentos</span>
-              </div>
-
-              <h2 className="text-3xl font-bold">
-                {pacienteSelecionado
-                  ? `Tratamentos de ${pacienteSelecionado.nome}`
-                  : "Tratamentos"}
-              </h2>
-
+              <h2 className="text-3xl font-bold">Tratamentos</h2>
               <p className="mt-1 text-slate-500">
-                {pacienteSelecionado
-                  ? "Acompanhe os tratamentos odontológicos vinculados a este paciente."
-                  : "Acompanhe tratamentos odontológicos, estética, harmonização, progresso e próximas sessões."}
+                Procedimentos odontológicos e de HOF por paciente, do planejamento à conclusão.
               </p>
             </div>
+            <select
+              value={pacienteFiltro}
+              onChange={(event) => setPacienteFiltro(event.target.value)}
+              className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none"
+            >
+              <option value="">Todos os pacientes</option>
+              {pacientes.map((paciente) => (
+                <option key={String(paciente.id)} value={String(paciente.id)}>
+                  {paciente.nome}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            <div className="flex flex-wrap gap-3">
-              {pacienteSelecionado && (
-                <Link
-                  href="/tratamentos"
-                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700"
-                >
-                  Ver todos
-                </Link>
-              )}
-
-              <Link
-                href="/pacientes"
-                className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white"
-              >
-                Ver pacientes
-              </Link>
+          <div className="mt-8 grid gap-6 md:grid-cols-5">
+            {[
+              ["Em andamento", contar("Em andamento"), "text-amber-600"],
+              ["Urgentes", contar("Urgente"), "text-red-600"],
+              ["Planejados", contar("Planejado"), "text-cyan-700"],
+              ["Concluídos", contar("Concluído"), "text-emerald-600"],
+            ].map(([titulo, valor, cor]) => (
+              <div key={String(titulo)} className="rounded-3xl bg-white p-6 shadow-sm">
+                <p className="text-sm text-slate-500">{titulo}</p>
+                <h3 className={`mt-3 text-3xl font-bold ${cor}`}>{valor}</h3>
+              </div>
+            ))}
+            <div className="rounded-3xl bg-white p-6 shadow-sm">
+              <p className="text-sm text-slate-500">Valor em aberto</p>
+              <h3 className="mt-3 text-2xl font-bold">{formatarMoeda(valorEmAberto)}</h3>
+              <p className="mt-2 text-xs text-slate-500">Tratamentos não concluídos</p>
             </div>
           </div>
 
-          {pacienteSelecionado && (
-            <div className="mt-8 rounded-3xl border border-cyan-100 bg-cyan-50 p-6 shadow-sm">
-              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                <div>
-                  <p className="text-sm font-semibold text-cyan-700">
-                    Paciente selecionado
-                  </p>
-
-                  <h3 className="mt-1 text-2xl font-bold text-slate-900">
-                    {pacienteSelecionado.nome}
-                  </h3>
-
-                  <p className="mt-2 text-sm text-cyan-700">
-                    Esta página está mostrando apenas os tratamentos deste
-                    paciente usando o ID {pacienteSelecionado.id}.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    href={`/pacientes/${pacienteIdQuery}?aba=prontuario`}
-                    className="rounded-xl bg-white px-5 py-3 text-center font-semibold text-cyan-700"
-                  >
-                    Ver prontuário
-                  </Link>
-
-                  <Link
-                    href={`/pacientes/${pacienteIdQuery}?aba=documentos`}
-                    className="rounded-xl bg-white px-5 py-3 text-center font-semibold text-cyan-700"
-                  >
-                    Ver documentos
-                  </Link>
-                </div>
-              </div>
-            </div>
+          {mensagem.texto && (
+            <p className={`mt-6 rounded-xl px-4 py-3 text-sm font-semibold ${mensagem.erro ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {mensagem.texto}
+            </p>
           )}
 
-          <div className="mt-8 grid gap-6 md:grid-cols-4">
-            <div className="rounded-3xl bg-white p-6 shadow-sm">
-              <p className="text-sm text-slate-500">Tratamentos ativos</p>
-              <h3 className="mt-3 text-3xl font-bold">{emAndamento}</h3>
-              <p className="mt-2 text-xs text-amber-600">
-                Em acompanhamento
-              </p>
-            </div>
-
-            <div className="rounded-3xl bg-white p-6 shadow-sm">
-              <p className="text-sm text-slate-500">Urgentes</p>
-              <h3 className="mt-3 text-3xl font-bold">{urgentes}</h3>
-              <p className="mt-2 text-xs text-red-600">
-                Precisam de atenção rápida
-              </p>
-            </div>
-
-            <div className="rounded-3xl bg-white p-6 shadow-sm">
-              <p className="text-sm text-slate-500">Planejados</p>
-              <h3 className="mt-3 text-3xl font-bold">{planejados}</h3>
-              <p className="mt-2 text-xs text-cyan-700">Aguardando início</p>
-            </div>
-
-            <div className="rounded-3xl bg-white p-6 shadow-sm">
-              <p className="text-sm text-slate-500">Concluídos</p>
-              <h3 className="mt-3 text-3xl font-bold">{concluidos}</h3>
-              <p className="mt-2 text-xs text-emerald-600">Finalizados</p>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <Link
-              href={
-                pacienteSelecionado
-                  ? `/estetica-odontologica?paciente=${encodeURIComponent(
-                      pacienteSelecionado.nome
-                    )}`
-                  : "/estetica-odontologica"
-              }
-              className="block rounded-3xl border border-cyan-100 bg-cyan-50 p-6 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-100"
-            >
-              <div className="flex h-full flex-col justify-between gap-5">
-                <div>
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="text-sm font-semibold text-cyan-700">
-                      Odontologia Estética / HOF
-                    </p>
-
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-cyan-700">
-                      Abrir
-                    </span>
-                  </div>
-
-                  <h3 className="mt-3 text-xl font-bold text-slate-900">
-                    Harmonização e procedimentos estéticos
-                  </h3>
-
-                  <p className="mt-2 text-sm text-cyan-700">
-                    Controle avaliação estética, fotos antes/depois, produtos
-                    utilizados, termos, retornos e evolução visual.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl bg-white p-4">
-                    <p className="text-xs text-slate-500">Procedimentos</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-900">
-                      18
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white p-4">
-                    <p className="text-xs text-slate-500">Em retorno</p>
-                    <p className="mt-1 text-2xl font-bold text-amber-600">
-                      6
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-6 shadow-sm">
-              <p className="text-sm font-semibold text-emerald-700">
-                Plano de tratamento
-              </p>
-
-              <h3 className="mt-3 text-xl font-bold text-slate-900">
-                Tratamentos odontológicos completos
-              </h3>
-
-              <p className="mt-2 text-sm text-emerald-700">
-                Organize etapas, sessões, valores, documentos e evolução do
-                paciente em um só lugar.
-              </p>
-
-              <Link
-                href="/orcamentos"
-                className="mt-5 inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-700"
-              >
-                Criar orçamento
-              </Link>
-            </div>
-
-            <div className="rounded-3xl border border-amber-100 bg-amber-50 p-6 shadow-sm">
-              <p className="text-sm font-semibold text-amber-700">
-                Documentos e termos
-              </p>
-
-              <h3 className="mt-3 text-xl font-bold text-slate-900">
-                Consentimentos e anexos
-              </h3>
-
-              <p className="mt-2 text-sm text-amber-700">
-                Vincule termos de consentimento, contrato, fotos e documentos
-                ao tratamento do paciente.
-              </p>
-
-              <Link
-                href={
-                  pacienteSelecionado
-                    ? `/documentos?pacienteId=${pacienteIdQuery}`
-                    : "/documentos"
-                }
-                className="mt-5 inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-amber-700"
-              >
-                Ver documentos
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <div className="rounded-3xl bg-white p-6 shadow-sm lg:col-span-2">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold">
-                    {pacienteSelecionado
-                      ? `Tratamentos de ${nomePaciente}`
-                      : "Tratamentos em andamento"}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {pacienteSelecionado
-                      ? "Procedimentos vinculados a este paciente."
-                      : "Procedimentos vinculados ao paciente e à ficha clínica."}
-                  </p>
-                </div>
-
-                <select className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none">
-                  <option>Todos</option>
-                  <option>Urgentes</option>
-                  <option>Em andamento</option>
-                  <option>Planejados</option>
-                  <option>Concluídos</option>
-                </select>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {tratamentosFiltrados.map((tratamento) => (
-                  <div
-                    key={tratamento.id}
-                    className="rounded-3xl border border-slate-100 bg-slate-50 p-5"
+          <div className="mt-6 grid gap-6 xl:grid-cols-3">
+            <div className="rounded-3xl bg-white p-6 shadow-sm xl:col-span-2">
+              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                <h3 className="text-xl font-bold">Lista de tratamentos</h3>
+                <div className="flex flex-wrap gap-3">
+                  <input
+                    value={busca}
+                    onChange={(event) => setBusca(event.target.value)}
+                    placeholder="Buscar procedimento ou paciente"
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none"
+                  />
+                  <select
+                    value={statusFiltro}
+                    onChange={(event) => setStatusFiltro(event.target.value)}
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none"
                   >
-                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h4 className="text-lg font-bold">
-                            {tratamento.procedimento}
-                          </h4>
+                    <option>Todos</option>
+                    {statusTratamento.map((status) => (
+                      <option key={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasse(
-                              tratamento.status
-                            )}`}
-                          >
-                            {tratamento.status}
-                          </span>
-                        </div>
-
-                        <p className="mt-2 text-sm text-slate-500">
-                          Paciente:{" "}
-                          <span className="font-semibold text-slate-700">
-                            {tratamento.paciente}
-                          </span>
-                        </p>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                          Dente relacionado:{" "}
-                          <span className="font-semibold text-slate-700">
-                            {tratamento.dente}
-                          </span>
-                        </p>
-                      </div>
-
-                      <div className="text-left md:text-right">
-                        <p className="text-sm text-slate-500">Valor</p>
-                        <p className="text-xl font-bold">
-                          {tratamento.valor}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5">
-                      <div className="mb-2 flex items-center justify-between text-sm">
-                        <span className="text-slate-500">Progresso</span>
-                        <span className="font-semibold">
-                          {tratamento.progresso}
-                        </span>
-                      </div>
-
-                      <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className={`h-full rounded-full ${getBarraClasse(
-                            tratamento.status
-                          )}`}
-                          style={{ width: tratamento.progresso }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                      <p className="text-sm text-slate-500">
-                        Próxima sessão:{" "}
-                        <span className="font-semibold text-slate-700">
-                          {tratamento.proximaSessao}
-                        </span>
-                      </p>
-
-                      <div className="flex flex-wrap gap-3">
-                        <Link
-                          href={getLinkPaciente(tratamento.pacienteId)}
-                          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-                        >
-                          Abrir paciente
-                        </Link>
-
-                        <Link
-                          href="/financeiro/novo"
-                          className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-                        >
-                          Lançar pagamento
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {tratamentosFiltrados.length === 0 && (
-                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                    <h4 className="text-lg font-bold">
-                      Nenhum tratamento encontrado
-                    </h4>
-                    <p className="mt-2 text-sm text-slate-500">
-                      Este paciente ainda não possui tratamentos cadastrados.
-                    </p>
+              <div className="mt-6 overflow-x-auto">
+                <table className="w-full min-w-[820px] text-left text-sm">
+                  <thead className="border-b border-slate-100 text-slate-500">
+                    <tr>
+                      <th className="pb-3">Paciente</th>
+                      <th className="pb-3">Procedimento</th>
+                      <th className="pb-3">Data</th>
+                      <th className="pb-3">Valor</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lista.map((tratamento) => {
+                      const status = statusCanonico(tratamento.status);
+                      return (
+                        <tr key={String(tratamento.id)} className="border-b border-slate-50">
+                          <td className="py-4 font-semibold">
+                            <Link href={`/pacientes/${tratamento.pacienteId}?aba=prontuario`} className="hover:text-cyan-700">
+                              {nomePorPaciente.get(String(tratamento.pacienteId)) || tratamento.paciente || "Paciente removido"}
+                            </Link>
+                          </td>
+                          <td className="py-4">{tratamento.descricao}</td>
+                          <td className="py-4">{formatarDataBr(tratamento.data)}</td>
+                          <td className="py-4">{tratamento.valor || "-"}</td>
+                          <td className="py-4">
+                            <select
+                              value={status}
+                              onChange={(event) => updateTratamento(tratamento.id, { status: event.target.value })}
+                              className={`rounded-full px-3 py-1 text-xs font-semibold outline-none ${classesStatus[normalizarTexto(status)]}`}
+                            >
+                              {statusTratamento.map((opcao) => (
+                                <option key={opcao}>{opcao}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center justify-end gap-3">
+                              <Link
+                                href={`/financeiro/novo?pacienteId=${tratamento.pacienteId}&descricao=${encodeURIComponent(tratamento.descricao)}&valor=${encodeURIComponent(String(dinheiroParaNumero(tratamento.valor) || ""))}`}
+                                className="text-xs font-semibold text-cyan-700"
+                              >
+                                Lançar pagamento
+                              </Link>
+                              <button type="button" onClick={() => excluir(tratamento)} aria-label="Excluir tratamento" className="text-rose-600">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {lista.length === 0 && (
+                  <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                    Nenhum tratamento encontrado.
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="rounded-3xl bg-white p-6 shadow-sm">
-                <h3 className="text-xl font-bold">Resumo clínico</h3>
-
-                <div className="mt-6 space-y-4">
-                  <div className="rounded-2xl bg-red-50 p-4">
-                    <p className="font-semibold text-red-700">
-                      Atenção urgente
-                    </p>
-                    <p className="mt-1 text-sm text-red-600">
-                      {urgentes > 0
-                        ? "Existe tratamento marcado como urgente."
-                        : "Nenhum tratamento urgente no momento."}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-amber-50 p-4">
-                    <p className="font-semibold text-amber-700">
-                      Em andamento
-                    </p>
-                    <p className="mt-1 text-sm text-amber-700">
-                      {emAndamento > 0
-                        ? "Existe tratamento em acompanhamento."
-                        : "Nenhum tratamento em andamento no momento."}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-cyan-50 p-4">
-                    <p className="font-semibold text-cyan-700">Planejado</p>
-                    <p className="mt-1 text-sm text-cyan-700">
-                      {planejados > 0
-                        ? "Existe tratamento aguardando início."
-                        : "Nenhum tratamento planejado no momento."}
-                    </p>
-                  </div>
+            <form onSubmit={salvar} className="h-fit rounded-3xl bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-bold">Novo tratamento</h3>
+              <div className="mt-5 space-y-4">
+                <label className="block">
+                  <span className="text-sm font-semibold">Paciente</span>
+                  <select value={form.pacienteId} onChange={(event) => setForm({ ...form, pacienteId: event.target.value })} className={campo}>
+                    <option value="">Selecione</option>
+                    {pacientes.map((paciente) => (
+                      <option key={String(paciente.id)} value={String(paciente.id)}>
+                        {paciente.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-semibold">Procedimento</span>
+                  <input
+                    value={form.descricao}
+                    onChange={(event) => setForm({ ...form, descricao: event.target.value })}
+                    placeholder="Ex.: Canal no dente 36"
+                    className={campo}
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-sm font-semibold">Status</span>
+                    <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className={campo}>
+                      {statusTratamento.map((status) => (
+                        <option key={status}>{status}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold">Valor (R$)</span>
+                    <input
+                      inputMode="decimal"
+                      value={form.valor}
+                      onChange={(event) => setForm({ ...form, valor: event.target.value.replace(/[^\d.,]/g, "") })}
+                      placeholder="0,00"
+                      className={campo}
+                    />
+                  </label>
                 </div>
-              </div>
-
-              <PremiumCard
-                title="Plano de tratamento completo"
-                description="Monte várias etapas de tratamento, com valores, sessões, documentos e aceite do paciente."
-              />
-            </div>
-          </div>
-
-          <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold">Linha do tempo</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {pacienteSelecionado
-                    ? `Histórico recente dos procedimentos de ${pacienteSelecionado.nome}`
-                    : "Histórico recente dos procedimentos odontológicos"}
+                <label className="block">
+                  <span className="text-sm font-semibold">Data</span>
+                  <input type="date" value={form.data} onChange={(event) => setForm({ ...form, data: event.target.value })} className={campo} />
+                </label>
+                <button type="submit" className="w-full rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">
+                  Cadastrar tratamento
+                </button>
+                <p className="text-xs text-slate-500">
+                  Para planos completos com várias etapas e orçamento, use o plano de tratamento no prontuário do paciente.
                 </p>
               </div>
-
-              <Link
-                href={
-                  pacienteSelecionado
-                    ? `/pacientes/${pacienteIdQuery}?aba=prontuario`
-                    : "/prontuario"
-                }
-                className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Ver prontuário
-              </Link>
-            </div>
-
-            <div className="mt-6 space-y-4">
-              {tratamentosFiltrados.map((tratamento) => (
-                <div
-                  key={`linha-${tratamento.id}`}
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                >
-                  <p className="font-semibold">
-                    {tratamento.proximaSessao} - {tratamento.procedimento}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Paciente {tratamento.paciente} com procedimento{" "}
-                    {tratamento.procedimento.toLowerCase()} relacionado ao
-                    dente {tratamento.dente}. Status atual:{" "}
-                    {tratamento.status}.
-                  </p>
-                </div>
-              ))}
-
-              {tratamentosFiltrados.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
-                  <p className="font-semibold">
-                    Sem registros na linha do tempo
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Nenhum tratamento foi encontrado para exibir aqui.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <PremiumCard
-              title="Orçamentos por tratamento"
-              description="Transforme tratamentos em orçamentos completos para aprovação do paciente."
-            />
-
-            <PremiumCard
-              title="Contrato e termo"
-              description="Gere termos de consentimento, contratos e documentos vinculados ao tratamento."
-            />
-
-            <PremiumCard
-              title="Antes e depois"
-              description="Acompanhe imagens de evolução, comparativos e resultados dos procedimentos."
-            />
+            </form>
           </div>
         </section>
       </div>

@@ -14,11 +14,11 @@ import {
   Copy,
   FileText,
   HeartPulse,
+  type LucideIcon,
   Mail,
   MapPin,
   MessageCircle,
   Phone,
-  Plus,
   QrCode,
   ReceiptText,
   Settings,
@@ -26,16 +26,13 @@ import {
   Stethoscope,
   Users,
   WalletCards,
-  type LucideIcon,
 } from "lucide-react";
-
-type ProfissaoSlug =
-  | "odontologia"
-  | "nutricao"
-  | "psicologia"
-  | "fisioterapia"
-  | "medicina"
-  | "outros";
+import {
+  configClinicaPadrao,
+  getConfigClinica,
+  saveConfigClinica,
+  type ConfigClinica,
+} from "@/utils/cliniplusStore";
 
 type PlanoSlug = "starter" | "pro" | "premium";
 type ModoSlug = "teste" | "assinatura";
@@ -45,7 +42,7 @@ type Servico = { nome: string; descricao: string; icon: IconComponent };
 
 const etapas = [
   { numero: 1, titulo: "Boas-vindas", subtitulo: "Plano selecionado" },
-  { numero: 2, titulo: "Seu(s) servico(s)", subtitulo: "Area de atuacao" },
+  { numero: 2, titulo: "Seu(s) servico(s)", subtitulo: "Odontologia e HOF" },
   {
     numero: 3,
     titulo: "Sua clinica ou consultorio",
@@ -55,57 +52,6 @@ const etapas = [
   { numero: 5, titulo: "Configuracoes", subtitulo: "Preferencias iniciais" },
   { numero: 6, titulo: "Pagamento", subtitulo: "Finalize sua assinatura" },
   { numero: 7, titulo: "Tudo pronto!", subtitulo: "Vamos comecar" },
-];
-
-const profissoes: Array<{
-  slug: ProfissaoSlug;
-  nome: string;
-  descricao: string;
-  icon: IconComponent;
-  cor: string;
-}> = [
-  {
-    slug: "medicina",
-    nome: "Medicina",
-    descricao: "Consultas, prontuarios, exames e acompanhamento de pacientes.",
-    icon: Stethoscope,
-    cor: "text-cyan-700 bg-cyan-50",
-  },
-  {
-    slug: "odontologia",
-    nome: "Odontologia",
-    descricao: "Prontuario odontologico, planos de tratamento e acompanhamento.",
-    icon: HeartPulse,
-    cor: "text-blue-700 bg-blue-50",
-  },
-  {
-    slug: "psicologia",
-    nome: "Psicologia",
-    descricao: "Anamnese, evolucao terapeutica e documentos de pacientes.",
-    icon: ClipboardList,
-    cor: "text-violet-700 bg-violet-50",
-  },
-  {
-    slug: "fisioterapia",
-    nome: "Fisioterapia",
-    descricao: "Avaliacoes, evolucao e planos de tratamento fisioterapeutico.",
-    icon: Users,
-    cor: "text-emerald-700 bg-emerald-50",
-  },
-  {
-    slug: "nutricao",
-    nome: "Nutricao",
-    descricao: "Planos alimentares, acompanhamento e evolucao nutricional.",
-    icon: ShieldCheck,
-    cor: "text-teal-700 bg-teal-50",
-  },
-  {
-    slug: "outros",
-    nome: "Outros servicos",
-    descricao: "Personalize de acordo com sua especialidade ou pratica profissional.",
-    icon: Plus,
-    cor: "text-purple-700 bg-purple-50",
-  },
 ];
 
 const servicosTesteGratis: Servico[] = [
@@ -173,49 +119,6 @@ const servicosOdontologiaPorPlano: Record<PlanoSlug, Servico[]> = {
   premium: odontologiaPremium,
 };
 
-const servicosPorProfissao: Record<ProfissaoSlug, Servico[]> = {
-  odontologia: odontologiaStarter,
-  nutricao: [
-    { nome: "Avaliacao nutricional", descricao: "Registre dados iniciais e objetivos do paciente.", icon: ClipboardList },
-    { nome: "Plano alimentar", descricao: "Organize orientacoes e prescricoes alimentares.", icon: FileText },
-    { nome: "Medidas corporais", descricao: "Acompanhe medidas e composicao corporal.", icon: HeartPulse },
-    { nome: "Evolucao nutricional", descricao: "Monitore progresso e ajustes de conduta.", icon: HeartPulse },
-    { nome: "Recordatorio alimentar", descricao: "Documente rotina, habitos e preferencias.", icon: ClipboardList },
-    { nome: "Retornos", descricao: "Controle acompanhamentos e proximas consultas.", icon: CalendarDays },
-    { nome: "Fotos de evolucao", descricao: "Organize imagens de acompanhamento.", icon: FileText },
-  ],
-  psicologia: [
-    { nome: "Sessoes", descricao: "Organize atendimentos e historico do paciente.", icon: CalendarDays },
-    { nome: "Anamnese", descricao: "Documente dados iniciais e queixas principais.", icon: ClipboardList },
-    { nome: "Evolucao terapeutica", descricao: "Acompanhe sessoes, observacoes e plano de cuidado.", icon: HeartPulse },
-    { nome: "Documentos", descricao: "Organize declaracoes, anexos e registros importantes.", icon: FileText },
-    { nome: "Retornos", descricao: "Controle continuidade e proximos atendimentos.", icon: CalendarDays },
-    { nome: "Agenda de atendimentos", descricao: "Gerencie horarios e disponibilidade.", icon: CalendarDays },
-  ],
-  fisioterapia: [
-    { nome: "Avaliacao fisioterapeutica", descricao: "Registre avaliacao inicial, limitacoes e objetivos.", icon: ClipboardList },
-    { nome: "Plano terapeutico", descricao: "Monte condutas, objetivos e frequencia.", icon: FileText },
-    { nome: "Evolucao", descricao: "Acompanhe progresso e resposta ao tratamento.", icon: HeartPulse },
-    { nome: "Sessoes", descricao: "Organize atendimentos e comparecimento.", icon: CalendarDays },
-    { nome: "Retornos", descricao: "Controle continuidade do cuidado.", icon: CalendarDays },
-    { nome: "Exercicios orientados", descricao: "Registre orientacoes e tarefas do paciente.", icon: ClipboardList },
-  ],
-  medicina: [
-    { nome: "Consultas", descricao: "Registre atendimento, condutas e historico.", icon: Stethoscope },
-    { nome: "Retornos", descricao: "Acompanhe continuidade e proximas consultas.", icon: CalendarDays },
-    { nome: "Exames", descricao: "Organize solicitacoes e resultados.", icon: FileText },
-    { nome: "Prescricoes", descricao: "Prepare prescricoes e orientacoes.", icon: ClipboardList },
-    { nome: "Atestados", descricao: "Organize documentos clinicos importantes.", icon: FileText },
-    { nome: "Prontuario", descricao: "Centralize registros medicos do paciente.", icon: ClipboardList },
-  ],
-  outros: [
-    { nome: "Cadastro de pacientes", descricao: "Centralize informacoes e historico.", icon: Users },
-    { nome: "Agenda", descricao: "Organize horarios e retornos.", icon: CalendarDays },
-    { nome: "Documentos", descricao: "Guarde arquivos e registros importantes.", icon: FileText },
-    { nome: "Financeiro basico", descricao: "Controle lancamentos essenciais.", icon: WalletCards },
-  ],
-};
-
 const planos: Array<{ slug: PlanoSlug; nome: string; resumo: string }> = [
   { slug: "starter", nome: "Plano Starter", resumo: "Para comecar" },
   { slug: "pro", nome: "Plano Pro", resumo: "Automacoes e produtividade" },
@@ -235,7 +138,7 @@ const preferencias = [
   "Relatorios e dashboards",
 ];
 
-const funcoesEquipe = ["Profissional de saude", "Secretaria", "Gestor"];
+const funcoesEquipe = ["Cirurgiao-dentista", "ASB / TSB", "Recepcao", "Gestor"];
 const equipeStorageKey = "equipe-cliniplus";
 
 type MembroEquipeOnboarding = {
@@ -277,40 +180,6 @@ function criarIdEquipe() {
   }
 
   return String(Date.now());
-}
-
-function getNomeProfissao(profissao: string) {
-  if (profissao === "odontologia") return "Odontologia";
-  if (profissao === "nutricao") return "Nutrição";
-  if (profissao === "psicologia") return "Psicologia";
-  if (profissao === "fisioterapia") return "Fisioterapia";
-  if (profissao === "medicina") return "Medicina";
-  if (profissao === "outros") return "Outros serviços";
-  return "Área da saúde";
-}
-
-function getDashboardPorProfissao(profissao: string) {
-  if (profissao === "odontologia") {
-    return "/dashboard";
-  }
-
-  if (profissao === "nutricao") {
-    return "/dashboard?profissao=nutricao";
-  }
-
-  if (profissao === "psicologia") {
-    return "/dashboard?profissao=psicologia";
-  }
-
-  if (profissao === "fisioterapia") {
-    return "/dashboard?profissao=fisioterapia";
-  }
-
-  if (profissao === "medicina") {
-    return "/dashboard?profissao=medicina";
-  }
-
-  return "/dashboard";
 }
 
 function SparkleIcon({ size = 22 }: { size?: number }) {
@@ -397,10 +266,14 @@ function Field({
   label,
   placeholder,
   icon: Icon,
+  value,
+  onChange,
 }: {
   label: string;
   placeholder: string;
   icon: LucideIcon;
+  value?: string;
+  onChange?: (valor: string) => void;
 }) {
   return (
     <label className="block">
@@ -410,6 +283,8 @@ function Field({
         <input
           type="text"
           placeholder={placeholder}
+          value={value}
+          onChange={onChange ? (event) => onChange(event.target.value) : undefined}
           className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
         />
       </span>
@@ -421,11 +296,6 @@ function normalizarEtapa(valor: string | null) {
   const etapa = Number(valor ?? "1");
   if (Number.isInteger(etapa) && etapa >= 1 && etapa <= 7) return etapa;
   return 1;
-}
-
-function normalizarProfissao(valor: string | null): ProfissaoSlug | "" {
-  const encontrada = profissoes.find((profissao) => profissao.slug === valor);
-  return encontrada?.slug ?? "";
 }
 
 function normalizarPlano(valor: string | null): PlanoSlug | "" {
@@ -447,18 +317,9 @@ function getRotuloModo(modo: ModoSlug | "", plano: PlanoSlug | "") {
   return "Sem plano selecionado";
 }
 
-function getServicosOnboarding(
-  profissao: ProfissaoSlug | "",
-  plano: PlanoSlug | "",
-  modo: ModoSlug | ""
-) {
-  if (!profissao) return [];
+function getServicosOnboarding(plano: PlanoSlug | "", modo: ModoSlug | "") {
   if (modo === "teste") return servicosTesteGratis;
-  if (profissao === "odontologia" && plano) {
-    return servicosOdontologiaPorPlano[plano];
-  }
-
-  return servicosPorProfissao[profissao] ?? [];
+  return servicosOdontologiaPorPlano[plano || "starter"];
 }
 
 function criarLinkEtapa(
@@ -466,7 +327,6 @@ function criarLinkEtapa(
   params: {
     plano?: string;
     modo?: string;
-    profissao?: string;
   }
 ) {
   const searchParams = new URLSearchParams();
@@ -481,10 +341,6 @@ function criarLinkEtapa(
     searchParams.set("modo", params.modo);
   }
 
-  if (params.profissao) {
-    searchParams.set("profissao", params.profissao);
-  }
-
   return `/onboarding?${searchParams.toString()}`;
 }
 
@@ -494,29 +350,17 @@ function OnboardingContent() {
   const modo = normalizarModo(searchParams.get("modo"));
   const planoParam = normalizarPlano(searchParams.get("plano"));
   const plano: PlanoSlug | "" = modo === "teste" ? "starter" : planoParam;
-  const profissaoParam = normalizarProfissao(searchParams.get("profissao"));
-  const profissao = profissaoParam;
-  const nomeProfissao = profissao
-    ? getNomeProfissao(profissao)
-    : "Escolha sua área";
+  const nomeProfissao = "Odontologia";
   const planoSelecionado = planos.find((item) => item.slug === plano);
   const rotuloModo = getRotuloModo(modo, plano);
-  const servicos = getServicosOnboarding(profissao, plano, modo);
+  const servicos = getServicosOnboarding(plano, modo);
   const planoPagamento: PlanoSlug = plano || "starter";
-  const hrefDashboardAssinatura = profissao
-    ? `/dashboard?modo=assinatura&plano=${planoPagamento}&profissao=${profissao}`
-    : "/dashboard";
+  const hrefDashboardAssinatura = `/dashboard?modo=assinatura&plano=${planoPagamento}`;
 
-  function criarHref(
-    etapa: number,
-    novaProfissao = profissao,
-    novoPlano = plano,
-    novoModo = modo
-  ) {
+  function criarHref(etapa: number, novoPlano = plano, novoModo = modo) {
     return criarLinkEtapa(etapa, {
       plano: novoPlano,
       modo: novoModo,
-      profissao: novaProfissao,
     });
   }
 
@@ -530,9 +374,7 @@ function OnboardingContent() {
       : criarHref(etapaAnterior);
   const hrefProximo = criarHref(proximaEtapa);
   const hrefDashboard =
-    modo === "assinatura"
-      ? hrefDashboardAssinatura
-      : getDashboardPorProfissao(profissao);
+    modo === "assinatura" ? hrefDashboardAssinatura : "/dashboard";
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -565,10 +407,7 @@ function OnboardingContent() {
               {etapas.map((etapa) => {
                 const ativa = etapa.numero === etapaAtiva;
                 const concluida = etapa.numero < etapaAtiva;
-                const subtitulo =
-                  etapa.numero === 2 && profissao
-                    ? nomeProfissao
-                    : etapa.subtitulo;
+                const subtitulo = etapa.subtitulo;
 
                 return (
                   <Link
@@ -607,11 +446,10 @@ function OnboardingContent() {
           <section className="space-y-6">
             <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
               {etapaAtiva === 1 && (
-                <EtapaProfissao
-                  criarHref={criarHref}
-                  plano={plano}
-                  modo={modo}
-                  profissaoSelecionada={profissao}
+                <EtapaBoasVindas
+                  plano={planoSelecionado}
+                  valor={modo === "teste" ? "7 dias grátis" : precosPlanos[planoPagamento]}
+                  nomeProfissao={nomeProfissao}
                 />
               )}
               {etapaAtiva === 2 && (
@@ -619,7 +457,6 @@ function OnboardingContent() {
                   nomeProfissao={nomeProfissao}
                   servicos={servicos}
                   rotuloModo={rotuloModo}
-                  voltarParaProfissao={criarHref(1)}
                 />
               )}
               {etapaAtiva === 3 && <EtapaClinica nomeProfissao={nomeProfissao} />}
@@ -669,13 +506,7 @@ function OnboardingContent() {
                   </Link>
                 )}
 
-                {etapaAtiva === 1 && !profissao && (
-                  <span className="inline-flex h-12 items-center justify-center rounded-xl bg-slate-100 px-5 text-sm font-extrabold text-slate-500">
-                    Escolha uma profissao
-                  </span>
-                )}
-
-                {etapaAtiva < 6 && (etapaAtiva > 1 || profissao) && (
+                {etapaAtiva < 6 && (
                   <Link
                     href={hrefProximo}
                     className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 text-sm font-extrabold text-white shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-700"
@@ -700,7 +531,6 @@ function OnboardingContent() {
 
           <ResumoLateral
             nomeProfissao={nomeProfissao}
-            profissao={profissao}
             plano={planoSelecionado}
             modo={modo}
             rotuloModo={rotuloModo}
@@ -732,8 +562,8 @@ function EtapaBoasVindas({
         Bem-vindo ao onboarding do Clini+
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
-        Vamos configurar sua conta paga para {nomeProfissao}. O modulo completo
-        disponivel nesta demo e Odontologia.
+        Vamos configurar o Clini+ para a sua clinica odontologica, com
+        prontuario, odontograma, orcamentos e modulo de HOF.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -746,12 +576,12 @@ function EtapaBoasVindas({
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-sm font-bold text-slate-600">Profissao</p>
+          <p className="text-sm font-bold text-slate-600">Especialidade</p>
           <h3 className="mt-2 text-xl font-extrabold text-slate-950">
-            {nomeProfissao}
+            {nomeProfissao} e HOF
           </h3>
           <p className="mt-1 text-sm font-semibold text-slate-500">
-            Dashboard odontologico ao final.
+            Prontuario, odontograma e harmonizacao orofacial.
           </p>
         </div>
 
@@ -769,100 +599,14 @@ function EtapaBoasVindas({
   );
 }
 
-function EtapaProfissao({
-  criarHref,
-  plano,
-  modo,
-  profissaoSelecionada,
-}: {
-  criarHref: (
-    etapa: number,
-    novaProfissao?: ProfissaoSlug | "",
-    novoPlano?: PlanoSlug | "",
-    novoModo?: ModoSlug | ""
-  ) => string;
-  plano: PlanoSlug | "";
-  modo: ModoSlug | "";
-  profissaoSelecionada: ProfissaoSlug | "";
-}) {
-  return (
-    <>
-      <p className="text-sm font-bold uppercase tracking-[0.12em] text-cyan-700">
-        Etapa 1
-      </p>
-      <h2 className="mt-1 text-3xl font-extrabold">
-        Vamos configurar seu espaco para comecar?
-      </h2>
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
-        Selecione sua area de atuacao para personalizar o restante do fluxo.
-        Voce podera ajustar tudo depois.
-      </p>
-
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {profissoes.map((profissao) => {
-          const Icon = profissao.icon;
-          const ativa = profissaoSelecionada === profissao.slug;
-
-          return (
-            <Link
-              key={profissao.slug}
-              href={criarHref(2, profissao.slug, plano, modo)}
-              className={`group flex min-h-[180px] flex-col justify-between rounded-2xl border p-5 text-left shadow-sm shadow-slate-200/50 transition hover:border-cyan-300 hover:bg-cyan-50 ${
-                ativa
-                  ? "border-cyan-300 bg-cyan-50"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              <span className="flex items-start justify-between gap-4">
-                <span
-                  className={`flex h-14 w-14 items-center justify-center rounded-2xl ${profissao.cor}`}
-                >
-                  <Icon size={27} />
-                </span>
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-md border transition group-hover:border-cyan-500 group-hover:bg-cyan-600 group-hover:text-white ${
-                    ativa
-                      ? "border-cyan-500 bg-cyan-600 text-white"
-                      : "border-slate-300 text-transparent"
-                  }`}
-                >
-                  <Check size={15} />
-                </span>
-              </span>
-              <span>
-                <span className="block text-lg font-extrabold text-slate-950">
-                  {profissao.nome}
-                </span>
-                <span className="mt-2 block text-sm font-semibold leading-relaxed text-slate-500">
-                  {profissao.descricao}
-                </span>
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="mt-6 flex items-start gap-3 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-blue-700">
-          <Check size={15} />
-        </span>
-        Nao se preocupe: voce pode adicionar ou alterar suas areas de atuacao a
-        qualquer momento.
-      </div>
-    </>
-  );
-}
-
 function EtapaServicos({
   nomeProfissao,
   servicos,
   rotuloModo,
-  voltarParaProfissao,
 }: {
   nomeProfissao: string;
   servicos: Servico[];
   rotuloModo: string;
-  voltarParaProfissao: string;
 }) {
   return (
     <>
@@ -873,23 +617,11 @@ function EtapaServicos({
         Escolha os servicos para {nomeProfissao}
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
-        A lista abaixo muda de acordo com a profissao, o plano e o modo atual:
+        A lista abaixo muda de acordo com o plano e o modo atual:
         <span className="font-extrabold text-cyan-700"> {rotuloModo}</span>.
       </p>
 
-      {servicos.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50 p-5">
-          <p className="text-sm font-bold text-cyan-900">
-            Selecione uma profissao primeiro.
-          </p>
-          <Link
-            href={voltarParaProfissao}
-            className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-cyan-600 px-4 text-sm font-extrabold text-white"
-          >
-            Voltar para profissao
-          </Link>
-        </div>
-      ) : (
+      {(
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {servicos.map((servico, index) => {
             const Icon = servico.icon;
@@ -927,6 +659,18 @@ function EtapaServicos({
 }
 
 function EtapaClinica({ nomeProfissao }: { nomeProfissao: string }) {
+  const [clinica, setClinica] = useState<ConfigClinica>(configClinicaPadrao);
+
+  useEffect(() => {
+    setClinica(getConfigClinica());
+  }, []);
+
+  function atualizar(campo: keyof ConfigClinica, valor: string) {
+    const proxima = { ...clinica, [campo]: valor };
+    setClinica(proxima);
+    saveConfigClinica(proxima);
+  }
+
   return (
     <>
       <p className="text-sm font-bold uppercase tracking-[0.12em] text-cyan-700">
@@ -936,48 +680,49 @@ function EtapaClinica({ nomeProfissao }: { nomeProfissao: string }) {
         Vamos conhecer seu espaco de atendimento
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
-        Essas informacoes ajudam a personalizar sua experiencia em{" "}
-        {nomeProfissao}.
+        Esses dados aparecem nos planos de tratamento impressos de {nomeProfissao}.
+        Voce pode alterar depois em Configuracoes.
       </p>
 
-      <form className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
           <Field
             label="Nome da clinica ou consultorio"
-            placeholder="Ex: Clinica Saude & Vida"
+            placeholder="Ex: Clinica Sorriso"
             icon={Building2}
+            value={clinica.nomeClinica}
+            onChange={(valor) => atualizar("nomeClinica", valor)}
           />
         </div>
         <Field
           label="Telefone / WhatsApp"
-          placeholder="(11) 99999-9999"
+          placeholder="(85) 99999-9999"
           icon={Phone}
+          value={clinica.telefone}
+          onChange={(valor) => atualizar("telefone", valor)}
         />
         <Field
           label="E-mail da clinica"
           placeholder="contato@seudominio.com.br"
           icon={Mail}
+          value={clinica.email}
+          onChange={(valor) => atualizar("email", valor)}
         />
-        <label className="block">
-          <span className="text-sm font-bold text-slate-800">
-            Tipo de espaco
-          </span>
-          <select className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-500 shadow-sm shadow-slate-200/60 outline-none focus:border-cyan-500">
-            <option>Clinica / Consultorio</option>
-            <option>Consultorio individual</option>
-            <option>Profissional autonomo</option>
-            <option>Rede de profissionais</option>
-          </select>
-        </label>
-        <Field label="CNPJ (opcional)" placeholder="00.000.000/0000-00" icon={Building2} />
-        <div className="md:col-span-2">
-          <Field
-            label="Endereco (opcional)"
-            placeholder="Rua das Flores, 123 - Centro, Sao Paulo - SP"
-            icon={MapPin}
-          />
-        </div>
-      </form>
+        <Field
+          label="CNPJ ou CPF (opcional)"
+          placeholder="00.000.000/0000-00"
+          icon={Building2}
+          value={clinica.documento}
+          onChange={(valor) => atualizar("documento", valor)}
+        />
+        <Field
+          label="Endereco (opcional)"
+          placeholder="Rua, numero - bairro, cidade - UF"
+          icon={MapPin}
+          value={clinica.endereco}
+          onChange={(valor) => atualizar("endereco", valor)}
+        />
+      </div>
     </>
   );
 }
@@ -1182,7 +927,6 @@ function EtapaConfiguracoes({
 }: {
   criarHref: (
     etapa: number,
-    novaProfissao?: ProfissaoSlug | "",
     novoPlano?: PlanoSlug | "",
     novoModo?: ModoSlug | ""
   ) => string;
@@ -1212,7 +956,7 @@ function EtapaConfiguracoes({
             {planos.map((item) => (
               <Link
                 key={item.slug}
-                href={criarHref(5, undefined, item.slug, modo || "assinatura")}
+                href={criarHref(5, item.slug, modo || "assinatura")}
                 className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm font-bold transition ${
                   plano === item.slug
                     ? "border-cyan-300 bg-cyan-50 text-cyan-800"
@@ -1293,6 +1037,10 @@ function EtapaPagamento({
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
         Escolha a forma de pagamento para liberar seu plano.
+      </p>
+      <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+        Ambiente de demonstracao: nenhuma cobranca e feita e os codigos abaixo sao exemplos.
+        O pagamento real entra com a integracao de um gateway (como Mercado Pago ou Stripe).
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -1452,7 +1200,7 @@ function EtapaPagamento({
               </span>
             </p>
             <p>
-              Profissao:{" "}
+              Especialidade:{" "}
               <span className="font-extrabold text-slate-950">
                 {nomeProfissao}
               </span>
@@ -1500,8 +1248,8 @@ function EtapaFinal({
         Tudo pronto para comecar em {nomeProfissao}
       </h2>
       <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-500">
-        Sua conta esta preparada com {rotuloModo}. Ao acessar o dashboard, o
-        destino respeita a profissao escolhida no fluxo.
+        Sua conta esta preparada com {rotuloModo}. Agora e so acessar o
+        dashboard e cadastrar seus primeiros pacientes.
       </p>
       <Link
         href={hrefDashboard}
@@ -1516,7 +1264,6 @@ function EtapaFinal({
 
 function ResumoLateral({
   nomeProfissao,
-  profissao,
   plano,
   modo,
   rotuloModo,
@@ -1525,7 +1272,6 @@ function ResumoLateral({
   hrefDashboard,
 }: {
   nomeProfissao: string;
-  profissao: ProfissaoSlug | "";
   plano: { nome: string; resumo: string } | undefined;
   modo: ModoSlug | "";
   rotuloModo: string;
@@ -1533,8 +1279,6 @@ function ResumoLateral({
   etapaAtiva: number;
   hrefDashboard: string;
 }) {
-  const profissaoEscolhida = profissoes.find((item) => item.slug === profissao);
-  const Icon = profissaoEscolhida?.icon ?? SparkleIcon;
 
   return (
     <aside className="space-y-6">
@@ -1561,10 +1305,10 @@ function ResumoLateral({
         </div>
 
         <div className="mt-5 border-t border-slate-200 pt-5">
-          <p className="text-sm font-bold text-slate-700">Area de atuacao</p>
+          <p className="text-sm font-bold text-slate-700">Especialidade</p>
           <div className="mt-3 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700">
-              <Icon size={22} />
+              <Stethoscope size={22} />
             </span>
             <span className="text-sm font-extrabold text-slate-900">
               {nomeProfissao}
@@ -1588,11 +1332,6 @@ function ResumoLateral({
                 </span>
               </div>
             ))}
-            {servicos.length === 0 && (
-              <p className="text-sm font-semibold text-slate-500">
-                Escolha uma profissao para ver os servicos.
-              </p>
-            )}
           </div>
         </div>
 
@@ -1610,8 +1349,7 @@ function ResumoLateral({
         </span>
         <h2 className="mt-4 text-xl font-extrabold">Proximos passos</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Ao concluir, voce sera levado para o dashboard correto para{" "}
-          {nomeProfissao}.
+          Ao concluir, voce sera levado para o dashboard da sua clinica.
         </p>
         <Link
           href={hrefDashboard}

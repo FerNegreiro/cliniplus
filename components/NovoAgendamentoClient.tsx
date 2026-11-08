@@ -25,13 +25,17 @@ import type { LucideIcon } from "lucide-react";
 import {
   addAgendamento,
   addPaciente,
-  getAgendamentos,
-  getPacientes,
-  updateAgendamento,
   type CliniplusAgendamento,
   type CliniplusPaciente,
+  getAgendamentos,
+  getPacientes,
+  getConfigClinica,
+  nomeExibicaoProfissional,
   type StoreId,
+  updateAgendamento,
 } from "@/utils/cliniplusStore";
+import { hojeIso } from "@/utils/datas";
+import { normalizarTexto } from "@/utils/format";
 
 type NovoAgendamentoClientProps = {
   pacienteInicial?: string;
@@ -61,19 +65,20 @@ type LembretesState = {
   formularioDigital: boolean;
 };
 
-const hoje = new Date().toISOString().slice(0, 10);
+const hoje = hojeIso();
 const horaPadrao = "14:00";
 
 const tiposAtendimento = ["Consulta inicial", "Retorno", "Exame", "Teleconsulta"];
 const especialidades = [
   "Clinica geral",
-  "Odontologia",
-  "Dermatologia",
-  "Psicologia",
-  "Nutricao",
-  "Fisioterapia",
-  "Cardiologia",
-  "Outro",
+  "Ortodontia",
+  "Endodontia",
+  "Implantodontia",
+  "Periodontia",
+  "Protese",
+  "Odontopediatria",
+  "Cirurgia",
+  "HOF",
 ];
 const unidades = ["Clinica principal", "Consultorio 01", "Consultorio 02", "Online"];
 const salas = ["Sala 01", "Sala 02", "Sala 03", "Teleconsulta"];
@@ -81,13 +86,6 @@ const pagamentos = ["Particular", "Convenio", "Pix", "Cartao", "Boleto", "Cortes
 const duracoes = ["15 min", "30 min", "45 min", "60 min", "90 min"];
 const recorrencias = ["Nao repetir", "Semanal", "Quinzenal", "Mensal"];
 const antecedencias = ["15 minutos", "30 minutos", "1 hora", "2 horas", "24 horas"];
-
-function normalizarTexto(valor: string) {
-  return valor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
 
 function formatarData(valor: string) {
   if (!valor) return "-";
@@ -158,8 +156,8 @@ export default function NovoAgendamentoClient({
   const [pacientes, setPacientes] = useState<PacienteComExtras[]>([]);
   const [agendamentos, setAgendamentos] = useState<CliniplusAgendamento[]>([]);
   const [profissionais, setProfissionais] = useState<string[]>([
-    "Dr(a). Responsavel",
-    "Profissional de saude",
+    nomeExibicaoProfissional(),
+    "Cirurgiao-dentista",
   ]);
   const [buscaPaciente, setBuscaPaciente] = useState(pacienteInicial);
   const [pacienteSelecionado, setPacienteSelecionado] =
@@ -174,13 +172,19 @@ export default function NovoAgendamentoClient({
 
   const [tipoAtendimento, setTipoAtendimento] = useState(tipoInicial);
   const [especialidade, setEspecialidade] = useState("Clinica geral");
-  const [profissional, setProfissional] = useState("Dr(a). Responsavel");
+  const [profissional, setProfissional] = useState(nomeExibicaoProfissional());
   const [unidade, setUnidade] = useState("Clinica principal");
   const [sala, setSala] = useState("Sala 02");
   const [pagamento, setPagamento] = useState("Particular");
   const [data, setData] = useState(dataInicial);
   const [horario, setHorario] = useState(horaInicial);
   const [duracao, setDuracao] = useState("30 min");
+
+  useEffect(() => {
+    if (!agendamentoId) {
+      setDuracao(getConfigClinica().duracaoConsulta);
+    }
+  }, [agendamentoId]);
   const [tipoConsulta, setTipoConsulta] = useState<"presencial" | "teleconsulta">(
     tipoInicial === "Teleconsulta" ? "teleconsulta" : "presencial"
   );
@@ -213,7 +217,7 @@ export default function NovoAgendamentoClient({
       setPacientes(pacientesStore);
       setAgendamentos(agendaStore);
       setProfissionais(
-        equipe.length > 0 ? equipe : ["Dr(a). Responsavel", "Profissional de saude"]
+        equipe.length > 0 ? equipe : [nomeExibicaoProfissional(), "Cirurgiao-dentista"]
       );
 
       if (!agendamentoId && pacienteInicial) {
@@ -246,13 +250,13 @@ export default function NovoAgendamentoClient({
     setNovoPaciente((atual) => ({ ...atual, nome: pacienteNome(agendamento) }));
     setTipoAtendimento(agendamento.tipoAtendimento || agendamento.procedimento || agendamento.tipo);
     setEspecialidade(agendamento.especialidade || "Clinica geral");
-    setProfissional(agendamento.profissional || "Dr(a). Responsavel");
+    setProfissional(agendamento.profissional || nomeExibicaoProfissional());
     setUnidade(agendamento.unidade || "Clinica principal");
     setSala(agendamento.sala || "Sala 02");
     setPagamento(agendamento.pagamento || "Particular");
     setData(agendamento.data || dataInicial);
     setHorario(agendamento.horario || agendamento.hora || horaInicial);
-    setDuracao(agendamento.duracao || "30 min");
+    setDuracao(agendamento.duracao || getConfigClinica().duracaoConsulta);
     setTipoConsulta(agendamento.tipo === "teleconsulta" ? "teleconsulta" : "presencial");
     setRecorrencia(agendamento.recorrencia || "Nao repetir");
     setEncaixe(Boolean(agendamento.encaixe));
@@ -267,7 +271,7 @@ export default function NovoAgendamentoClient({
 
   useEffect(() => {
     if (!profissionais.includes(profissional)) {
-      setProfissional(profissionais[0] || "Dr(a). Responsavel");
+      setProfissional(profissionais[0] || nomeExibicaoProfissional());
     }
   }, [profissionais, profissional]);
 

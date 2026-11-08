@@ -4,7 +4,6 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Search, UserRound } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
-import { pacientes as pacientesBase } from "@/data/pacientes";
 import { getPacientes, type CliniplusPaciente } from "@/utils/cliniplusStore";
 
 function getInitials(nome: string) {
@@ -19,12 +18,10 @@ function getInitials(nome: string) {
 
 function subscribeStore(onStoreChange: () => void) {
   window.addEventListener("cliniplus:store", onStoreChange);
-  window.addEventListener("cliniplus:pacientes", onStoreChange);
   window.addEventListener("storage", onStoreChange);
 
   return () => {
     window.removeEventListener("cliniplus:store", onStoreChange);
-    window.removeEventListener("cliniplus:pacientes", onStoreChange);
     window.removeEventListener("storage", onStoreChange);
   };
 }
@@ -37,19 +34,10 @@ export default function Prontuario() {
     () => "[]"
   );
 
-  const pacientes = useMemo(() => {
-    try {
-      const pacientesStore = JSON.parse(pacientesSnapshot) as CliniplusPaciente[];
-
-      if (pacientesStore.length > 0) {
-        return pacientesStore;
-      }
-
-      return pacientesBase.map((paciente) => ({ ...paciente }));
-    } catch {
-      return pacientesBase.map((paciente) => ({ ...paciente }));
-    }
-  }, [pacientesSnapshot]);
+  const pacientes = useMemo(
+    () => JSON.parse(pacientesSnapshot) as CliniplusPaciente[],
+    [pacientesSnapshot]
+  );
 
   const pacientesFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -128,7 +116,7 @@ export default function Prontuario() {
                         {paciente.nome}
                       </h2>
                       <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                        {paciente.area || "Sem area informada"}
+                        {paciente.tipoAtendimento === "estetica" ? "HOF" : "Odontologia"}
                       </p>
                     </div>
                   </div>
@@ -163,8 +151,15 @@ export default function Prontuario() {
                     Nenhum paciente encontrado
                   </h2>
                   <p className="mt-2 text-sm font-medium text-slate-500">
-                    Ajuste a busca para localizar um prontuario existente.
+                    {pacientes.length === 0
+                      ? "Cadastre o primeiro paciente para abrir um prontuario."
+                      : "Ajuste a busca para localizar um prontuario existente."}
                   </p>
+                  {pacientes.length === 0 && (
+                    <Link href="/pacientes/novo" className="mt-4 inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-black text-white">
+                      Novo paciente
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

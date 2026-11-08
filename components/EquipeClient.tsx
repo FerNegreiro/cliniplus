@@ -156,7 +156,7 @@ export default function EquipeClient() {
               <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-bold">Adicionar profissional</h2>
                 <p className="mt-1 text-sm font-semibold text-slate-500">
-                  Os dados ficam salvos em {equipeKey}.
+                  Profissionais ativos aparecem na agenda para novos atendimentos.
                 </p>
 
                 {mensagem && (

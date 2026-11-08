@@ -20,8 +20,8 @@ import {
   type CliniplusPaciente,
   type CliniplusPlanoTratamento,
   type OrcamentoItem,
-  type StoreId,
 } from "@/utils/cliniplusStore";
+import { hojeIso } from "@/utils/datas";
 
 type PacientePlanoOrcamentoProps = {
   paciente: CliniplusPaciente;
@@ -351,7 +351,7 @@ export default function PacientePlanoOrcamento({
         tipo: "Receita",
         valor: formatMoney(resumo.total),
         status: "Pendente",
-        data: new Date().toISOString().slice(0, 10),
+        data: hojeIso(),
         origem: "Orcamento/plano de tratamento",
       });
     }

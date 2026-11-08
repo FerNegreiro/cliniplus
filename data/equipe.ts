@@ -3,23 +3,23 @@ import type { MembroEquipe } from "@/types";
 export const membrosEquipe: MembroEquipe[] = [
   {
     id: 1,
-    nome: "Dr. Fernando Silva",
+    nome: "Dr. Rafael Oliveira",
     cargo: "Administrador",
-    profissao: "Médico",
+    profissao: "Cirurgião-dentista",
     status: "Ativo",
   },
   {
     id: 2,
     nome: "Ana Beatriz",
     cargo: "Secretária",
-    profissao: "Atendimento",
+    profissao: "Recepção",
     status: "Ativo",
   },
   {
     id: 3,
-    nome: "João Almeida",
+    nome: "Juliana Pires",
     cargo: "Profissional",
-    profissao: "Fisioterapeuta",
+    profissao: "Harmonização orofacial",
     status: "Convite pendente",
   },
 ];

@@ -12,7 +12,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
-  Apple,
   Archive,
   Bell,
   Bone,
@@ -44,65 +43,75 @@ import {
   Stethoscope,
   Trash2,
   Upload,
-  X,
   UserRound,
   UsersRound,
+  X,
 } from "lucide-react";
 import {
-  getAgendamentosByPacienteId,
   addDocumento,
-  addExame,
   addEvolucao,
+  addExame,
   addOdontogramaAnotacao,
   addOHFAvaliacao,
   addPlanoTratamento,
   addProcedimento,
-  deleteDocumento,
-  deleteExame,
-  deleteProcedimento,
-  deleteEvolucao,
-  deleteOdontogramaAnotacao,
-  deleteOHFAvaliacao,
-  getDocumentosByPacienteId,
-  getExamesByPacienteId,
-  getEvolucoesByPacienteId,
-  getHistoricoPaciente,
-  getOdontogramaByPacienteId,
-  getOHFByPacienteId,
-  getPlanosTratamentoByPacienteId,
-  getPacienteById,
-  getProcedimentosByPacienteId,
-  getProntuarioByPacienteId,
-  getSessaoPlano,
-  getTratamentosByPacienteId,
-  saveProntuario,
-  updateEvolucao,
-  updateDocumento,
-  updateExame,
-  updateOdontogramaAnotacao,
-  updateOHFAvaliacao,
-  updatePlanoTratamento,
-  updateProcedimento,
   type CliniplusAgendamento,
   type CliniplusDocumento,
+  type CliniplusEvolucao,
   type CliniplusExame,
   type CliniplusExameOrigem,
   type CliniplusExameStatus,
-  type CliniplusEvolucao,
-  type CliniplusOHFAvaliacao,
   type CliniplusOdontogramaAnotacao,
+  type CliniplusOHFAvaliacao,
   type CliniplusPaciente,
   type CliniplusPlanoTratamento,
   type CliniplusProcedimento,
   type CliniplusProcedimentoStatus,
   type CliniplusProntuario,
-  type SessaoPlano,
   type CliniplusTratamento,
+  deleteDocumento,
+  deleteEvolucao,
+  deleteExame,
+  deleteOdontogramaAnotacao,
+  deleteOHFAvaliacao,
+  deleteProcedimento,
+  getAgendamentosByPacienteId,
+  getDocumentosByPacienteId,
+  getEvolucoesByPacienteId,
+  getExamesByPacienteId,
+  getHistoricoPaciente,
+  getOdontogramaByPacienteId,
+  getOHFByPacienteId,
+  getPacienteById,
+  getPlanosTratamentoByPacienteId,
+  getProcedimentosByPacienteId,
+  getProntuarioByPacienteId,
+  getSessaoPlano,
+  getTratamentosByPacienteId,
+  nomeExibicaoProfissional,
   type PlanoTratamentoItem,
+  saveProntuario,
+  type SessaoPlano,
+  updateDocumento,
+  updateEvolucao,
+  updateExame,
+  updateOdontogramaAnotacao,
+  updateOHFAvaliacao,
+  updatePlanoTratamento,
+  updateProcedimento,
 } from "@/utils/cliniplusStore";
 import { OdontogramaTooth } from "@/components/OdontogramaTooth";
 import PacientePlanoOrcamento from "@/components/PacientePlanoOrcamento";
 import PacientePlanoImpressao from "@/components/PacientePlanoImpressao";
+import { hojeIso, dataIsoLocal } from "@/utils/datas";
+import ArquivoImagem from "@/components/ArquivoImagem";
+import {
+  TAMANHO_MAXIMO,
+  baixarPorUrl,
+  idDaReferencia,
+  referenciaArquivo,
+  salvarArquivo,
+} from "@/utils/arquivos";
 
 type PacienteProntuarioBaseProps = {
   pacienteId: number;
@@ -164,16 +173,6 @@ const anamneseVazia: AnamneseDados = {
   observacoesComplementares: "",
 };
 
-const areas = [
-  { key: "odontologia", label: "Odontologia", icon: Smile },
-  { key: "nutricao", label: "Nutricao", icon: Apple },
-  { key: "medicina", label: "Medicina", icon: Stethoscope },
-  { key: "psicologia", label: "Psicologia", icon: BrainIcon },
-  { key: "fisioterapia", label: "Fisioterapia", icon: Activity },
-  { key: "terapias", label: "Terapias", icon: Sparkles },
-  { key: "outras", label: "Outras areas", icon: SmilePlus },
-];
-
 const secoes = [
   { key: "resumo", label: "Resumo", icon: ClipboardList },
   { key: "anamnese", label: "Anamnese", icon: FileText },
@@ -184,15 +183,9 @@ const secoes = [
   { key: "procedimentos", label: "Procedimentos", icon: Bone },
   { key: "exames", label: "Exames", icon: FileText },
   { key: "documentos", label: "Documentos", icon: Send },
-  { key: "linha-tempo", label: "Linha do tempo", icon: Clock3 },
 ];
 
-const placeholderPorSecao: Record<string, string> = {
-  procedimentos: "Procedimentos sera implementado na proxima etapa.",
-  exames: "Exames sera implementado na proxima etapa.",
-  documentos: "Documentos sera implementado na proxima etapa.",
-  "linha-tempo": "Linha do tempo sera implementada na proxima etapa.",
-};
+const chavesSecoes = secoes.map((secao) => secao.key);
 
 type EvolucaoDraft = {
   id: string;
@@ -299,6 +292,7 @@ type DocumentoDraft = {
   observacoes: string;
   status: string;
   urlSimulada: string;
+  arquivoId: string;
 };
 
 const tiposEvolucao = [
@@ -583,26 +577,14 @@ const statusDocumentoOptions = [
   { value: "assinado", label: "Assinado" },
 ];
 
-function BrainIcon({
-  size = 18,
-  className = "",
-}: {
-  size?: number;
-  className?: string;
-}) {
-  return <UsersRound size={size} className={className} />;
-}
-
 function subscribeStore(onStoreChange: () => void) {
   window.addEventListener("cliniplus:store", onStoreChange);
   window.addEventListener("cliniplus:paciente-ficha", onStoreChange);
-  window.addEventListener("cliniplus:pacientes", onStoreChange);
   window.addEventListener("storage", onStoreChange);
 
   return () => {
     window.removeEventListener("cliniplus:store", onStoreChange);
     window.removeEventListener("cliniplus:paciente-ficha", onStoreChange);
-    window.removeEventListener("cliniplus:pacientes", onStoreChange);
     window.removeEventListener("storage", onStoreChange);
   };
 }
@@ -723,9 +705,9 @@ function getNowTime() {
 function createEmptyEvolucaoDraft(): EvolucaoDraft {
   return {
     id: "",
-    data: new Date().toISOString().slice(0, 10),
+    data: hojeIso(),
     hora: getNowTime(),
-    profissional: "Dr. Rafael Oliveira",
+    profissional: nomeExibicaoProfissional(),
     tipo: "Consulta",
     area: "Odontologia",
     dentes: "",
@@ -780,7 +762,7 @@ function createOdontogramaDraft(dente = "16"): OdontogramaDraft {
     face: "Geral",
     condicao: "Hígido",
     status: "Observação",
-    profissional: "Dr. Rafael Oliveira",
+    profissional: nomeExibicaoProfissional(),
     observacao: "",
   };
 }
@@ -802,9 +784,9 @@ function odontogramaToDraft(
 function createOHFDraft(): OHFDraft {
   return {
     id: "",
-    data: new Date().toISOString().slice(0, 10),
+    data: hojeIso(),
     hora: getNowTime(),
-    profissional: "Dr. Rafael Oliveira",
+    profissional: nomeExibicaoProfissional(),
     doencasSistemicas: "",
     alergias: "",
     medicamentosUso: "",
@@ -946,7 +928,7 @@ function createPlanoItemDraft(fase = fasesPlanoTratamento[0].id): PlanoItemDraft
     dente: "",
     prioridade: "media",
     status: "planejado",
-    profissional: "Dr. Rafael Oliveira",
+    profissional: nomeExibicaoProfissional(),
     valor: "",
     previsao: "",
     observacoes: "",
@@ -978,7 +960,7 @@ function draftToPlanoItem(draft: PlanoItemDraft): PlanoTratamentoItem {
     dente: draft.dente.trim(),
     prioridade: draft.prioridade,
     status: draft.status,
-    profissional: draft.profissional.trim() || "Dr. Rafael Oliveira",
+    profissional: draft.profissional.trim() || nomeExibicaoProfissional(),
     valor: parseMoney(draft.valor),
     previsao: draft.previsao,
     observacoes: draft.observacoes.trim(),
@@ -993,13 +975,13 @@ function createProcedimentoDraft(): ProcedimentoDraft {
 
   return {
     id: "",
-    data: agora.toISOString().slice(0, 10),
+    data: dataIsoLocal(agora),
     hora: agora.toTimeString().slice(0, 5),
     procedimento: "",
     dente: "",
     faceRegiao: "",
     categoria: "Preventiva",
-    profissional: "Dr. Rafael Oliveira",
+    profissional: nomeExibicaoProfissional(),
     status: "planejado",
     duracao: "",
     valor: "",
@@ -1020,7 +1002,7 @@ function procedimentoToDraft(item: CliniplusProcedimento): ProcedimentoDraft {
     dente: item.dente || "",
     faceRegiao: item.faceRegiao || "",
     categoria: item.categoria || "Outra",
-    profissional: item.profissional || "Dr. Rafael Oliveira",
+    profissional: item.profissional || nomeExibicaoProfissional(),
     status: item.status || "planejado",
     duracao: item.duracao || "",
     valor: item.valor ? String(item.valor) : "",
@@ -1047,7 +1029,7 @@ function draftToProcedimento(
     dente: draft.dente.trim(),
     faceRegiao: draft.faceRegiao.trim(),
     categoria: draft.categoria,
-    profissional: draft.profissional.trim() || "Dr. Rafael Oliveira",
+    profissional: draft.profissional.trim() || nomeExibicaoProfissional(),
     status: draft.status,
     duracao: draft.duracao.trim(),
     valor,
@@ -1071,13 +1053,13 @@ function createExameDraft(): ExameDraft {
 
   return {
     id: "",
-    data: agora.toISOString().slice(0, 10),
+    data: dataIsoLocal(agora),
     hora: agora.toTimeString().slice(0, 5),
     exame: "",
     dente: "",
     regiao: "",
     categoria: "Radiografia",
-    profissional: "Dr. Rafael Oliveira",
+    profissional: nomeExibicaoProfissional(),
     status: "solicitado",
     origem: "clinica",
     arquivoNome: "",
@@ -1101,7 +1083,7 @@ function exameToDraft(item: CliniplusExame): ExameDraft {
     dente: item.dente || "",
     regiao: item.regiao || "",
     categoria: item.categoria || "Outro",
-    profissional: item.profissional || "Dr. Rafael Oliveira",
+    profissional: item.profissional || nomeExibicaoProfissional(),
     status: item.status || "solicitado",
     origem: item.origem || "clinica",
     arquivoNome: item.arquivoNome || "",
@@ -1129,7 +1111,7 @@ function draftToExame(
     dente: draft.dente.trim(),
     regiao: draft.regiao.trim(),
     categoria: draft.categoria,
-    profissional: draft.profissional.trim() || "Dr. Rafael Oliveira",
+    profissional: draft.profissional.trim() || nomeExibicaoProfissional(),
     status: draft.status,
     origem: draft.origem,
     arquivoNome: draft.arquivoNome.trim(),
@@ -1237,12 +1219,13 @@ function createDocumentoDraft(documento?: CliniplusDocumento): DocumentoDraft {
     tipo,
     extensao: documento?.extensao || documento?.formato || "",
     tamanho: documento?.tamanho || "",
-    enviadoPor: documento?.enviadoPor || "Dr. Rafael Oliveira",
-    dataEnvio: documento?.dataEnvio || documento?.data || agora.toISOString().slice(0, 10),
+    enviadoPor: documento?.enviadoPor || nomeExibicaoProfissional(),
+    dataEnvio: documento?.dataEnvio || documento?.data || dataIsoLocal(agora),
     horaEnvio: documento?.horaEnvio || agora.toTimeString().slice(0, 5),
     observacoes: documento?.observacoes || documento?.observacao || "",
     status: documento?.status?.toLowerCase() || "ativo",
     urlSimulada: documento?.urlSimulada || "",
+    arquivoId: documento?.arquivoId || "",
   };
 }
 
@@ -1271,7 +1254,7 @@ function draftToDocumento(
     extensao: draft.extensao.trim(),
     formato: draft.extensao.trim(),
     tamanho: draft.tamanho.trim(),
-    enviadoPor: draft.enviadoPor.trim() || "Dr. Rafael Oliveira",
+    enviadoPor: draft.enviadoPor.trim() || nomeExibicaoProfissional(),
     data: draft.dataEnvio,
     dataEnvio: draft.dataEnvio,
     horaEnvio: draft.horaEnvio,
@@ -1280,6 +1263,7 @@ function draftToDocumento(
     status: draft.status,
     origem: draft.categoria,
     urlSimulada: draft.urlSimulada,
+    arquivoId: draft.arquivoId || undefined,
   };
 }
 
@@ -1578,7 +1562,6 @@ export default function PacienteProntuarioBase({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
-  const [areaAtual, setAreaAtual] = useState("odontologia");
   const [mensagem, setMensagem] = useState("");
   const [editandoResumo, setEditandoResumo] = useState(false);
   const [editandoAnamnese, setEditandoAnamnese] = useState(false);
@@ -1661,7 +1644,8 @@ export default function PacienteProntuarioBase({
     useState("Todas");
   const [ordenacaoDocumento, setOrdenacaoDocumento] = useState("Mais recentes");
   const [paginaDocumentos, setPaginaDocumentos] = useState(1);
-  const secaoAtual = searchParams.get("secao") || "resumo";
+  const secaoParam = searchParams.get("secao") || "resumo";
+  const secaoAtual = chavesSecoes.includes(secaoParam) ? secaoParam : "resumo";
   const acaoAtual = searchParams.get("acao");
 
   useEffect(() => {
@@ -1879,7 +1863,7 @@ export default function PacienteProntuarioBase({
     (evolucao) => evolucao.status === "assinada"
   );
   const profissionaisEvolucao = uniqueList([
-    "Dr. Rafael Oliveira",
+    nomeExibicaoProfissional(),
     ...evolucoes.map((evolucao) => evolucao.profissional).filter(Boolean),
   ]);
   const evolucoesFiltradas = evolucoes.filter((evolucao) => {
@@ -1915,7 +1899,7 @@ export default function PacienteProntuarioBase({
     return matchBusca && matchTipo && matchProfissional && dataEvolucao >= limite;
   });
   const profissionaisProcedimentos = uniqueList([
-    "Dr. Rafael Oliveira",
+    nomeExibicaoProfissional(),
     ...procedimentos
       .map((procedimento) => procedimento.profissional)
       .filter(Boolean),
@@ -1981,7 +1965,7 @@ export default function PacienteProntuarioBase({
     ["concluido", "assinado"].includes(item.status)
   );
   const profissionaisExames = uniqueList([
-    "Dr. Rafael Oliveira",
+    nomeExibicaoProfissional(),
     ...exames.map((exame) => exame.profissional).filter(Boolean),
   ]);
   const examesFiltrados = exames.filter((exame) => {
@@ -2092,10 +2076,6 @@ export default function PacienteProntuarioBase({
     params.set("aba", "prontuario");
     params.set("secao", secao);
     return `/pacientes/${pacienteId}?${params.toString()}`;
-  }
-
-  function showPreparationMessage(label: string) {
-    setMensagem(`${label}: modulo em preparacao.`);
   }
 
   function abrirEdicaoResumo() {
@@ -2232,7 +2212,7 @@ export default function PacienteProntuarioBase({
       status: odontogramaDraft.status,
       observacao: odontogramaDraft.observacao,
       profissional: odontogramaDraft.profissional,
-      data: new Date().toISOString().slice(0, 10),
+      data: hojeIso(),
     };
 
     if (odontogramaDraft.id) {
@@ -2312,7 +2292,7 @@ export default function PacienteProntuarioBase({
     const dadosOHF = {
       ...ohfDraft,
       pacienteId,
-      profissional: ohfDraft.profissional.trim() || "Dr. Rafael Oliveira",
+      profissional: ohfDraft.profissional.trim() || nomeExibicaoProfissional(),
       status,
     };
 
@@ -2350,8 +2330,8 @@ export default function PacienteProntuarioBase({
       pacienteId,
       titulo: "Plano de tratamento odontologico",
       status: "rascunho",
-      profissional: "Dr. Rafael Oliveira",
-      dataCriacao: new Date().toISOString().slice(0, 10),
+      profissional: nomeExibicaoProfissional(),
+      dataCriacao: hojeIso(),
       observacoes: "",
       formasPagamento: ["Pix", "Cartao de credito"],
       itens: [],
@@ -2568,6 +2548,17 @@ export default function PacienteProntuarioBase({
     setMensagem("Arquivo anexado ao exame.");
   }
 
+  function guardarArquivo(file: File, aoSalvar: (referencia: string) => void) {
+    if (file.size > TAMANHO_MAXIMO) {
+      setMensagem("O arquivo passa de 15 MB.");
+      return;
+    }
+
+    salvarArquivo(file, pacienteId)
+      .then((salvo) => aoSalvar(referenciaArquivo(salvo.id)))
+      .catch(() => setMensagem("Nao foi possivel guardar o arquivo neste navegador."));
+  }
+
   function selecionarArquivoExame(file: File | null) {
     if (!file) {
       return;
@@ -2580,14 +2571,9 @@ export default function PacienteProntuarioBase({
       arquivoTamanho: formatFileSize(file.size),
     }));
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setArquivoExameDraft((current) => ({
-        ...current,
-        arquivoUrl: typeof reader.result === "string" ? reader.result : "",
-      }));
-    };
-    reader.readAsDataURL(file);
+    guardarArquivo(file, (referencia) =>
+      setArquivoExameDraft((current) => ({ ...current, arquivoUrl: referencia }))
+    );
   }
 
   function selecionarArquivoNovoExame(file: File | null) {
@@ -2602,14 +2588,9 @@ export default function PacienteProntuarioBase({
       arquivoTamanho: formatFileSize(file.size),
     }));
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setExameDraft((current) => ({
-        ...current,
-        arquivoUrl: typeof reader.result === "string" ? reader.result : "",
-      }));
-    };
-    reader.readAsDataURL(file);
+    guardarArquivo(file, (referencia) =>
+      setExameDraft((current) => ({ ...current, arquivoUrl: referencia }))
+    );
   }
 
   function assinarExame(exame: CliniplusExame) {
@@ -2639,15 +2620,9 @@ export default function PacienteProntuarioBase({
       return;
     }
 
-    if (!exame.arquivoUrl) {
-      setMensagem("Arquivo preparado para download quando houver armazenamento real.");
-      return;
-    }
-
-    const link = document.createElement("a");
-    link.href = exame.arquivoUrl;
-    link.download = exame.arquivoNome;
-    link.click();
+    baixarPorUrl(exame.arquivoUrl, exame.arquivoNome).then((ok) => {
+      if (!ok) setMensagem("O arquivo nao esta disponivel neste navegador.");
+    });
     setMensagem("Download do arquivo iniciado.");
   }
 
@@ -2734,14 +2709,13 @@ export default function PacienteProntuarioBase({
       tamanho: formatFileSize(file.size),
     }));
 
-    const reader = new FileReader();
-    reader.onload = () => {
+    guardarArquivo(file, (referencia) =>
       setDocumentoDraft((current) => ({
         ...current,
-        urlSimulada: typeof reader.result === "string" ? reader.result : "",
-      }));
-    };
-    reader.readAsDataURL(file);
+        urlSimulada: referencia,
+        arquivoId: idDaReferencia(referencia),
+      }))
+    );
   }
 
   function salvarDocumento() {
@@ -2770,18 +2744,11 @@ export default function PacienteProntuarioBase({
   }
 
   function baixarDocumento(documento: CliniplusDocumento) {
-    if (!documento.urlSimulada) {
-      setMensagem("Documento preparado para download quando houver armazenamento real.");
-      setMenuDocumentoAbertoId("");
-      return;
-    }
-
-    const link = document.createElement("a");
-    link.href = documento.urlSimulada;
-    link.download = documento.nome;
-    link.click();
     setMenuDocumentoAbertoId("");
-    setMensagem("Download do documento iniciado.");
+    const url = documento.urlSimulada || (documento.arquivoId ? referenciaArquivo(documento.arquivoId) : "");
+    baixarPorUrl(url, documento.nome).then((ok) =>
+      setMensagem(ok ? "Download do documento iniciado." : "Este documento nao tem arquivo anexado.")
+    );
   }
 
   function arquivarDocumento(documento: CliniplusDocumento) {
@@ -3837,8 +3804,8 @@ export default function PacienteProntuarioBase({
       if (isImageFile(exame) && exame.arquivoUrl) {
         return (
           <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
-            <img
-              src={exame.arquivoUrl}
+            <ArquivoImagem
+              url={exame.arquivoUrl}
               alt={`Pre-visualizacao de ${exame.arquivoNome}`}
               className="max-h-64 w-full object-contain"
             />
@@ -4671,11 +4638,14 @@ export default function PacienteProntuarioBase({
         documento.extensao || documento.formato
       );
 
-      if (tipo === "imagem" && documento.urlSimulada) {
+      const urlDocumento =
+        documento.urlSimulada || (documento.arquivoId ? referenciaArquivo(documento.arquivoId) : "");
+
+      if (tipo === "imagem" && urlDocumento) {
         return (
           <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
-            <img
-              src={documento.urlSimulada}
+            <ArquivoImagem
+              url={urlDocumento}
               alt={`Pre-visualizacao de ${documento.nome}`}
               className="max-h-80 w-full object-contain"
             />
@@ -7683,7 +7653,7 @@ export default function PacienteProntuarioBase({
                 Profissional responsavel
               </p>
               <p className="mt-1 font-black text-slate-900">
-                Dr. Rafael Oliveira
+                {nomeExibicaoProfissional()}
               </p>
             </div>
           </div>
@@ -7716,60 +7686,6 @@ export default function PacienteProntuarioBase({
         ].join(" ")}
       >
         <div className="min-w-0 space-y-5">
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <div>
-              <h2 className="font-black text-slate-950">Area do prontuario</h2>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
-                Selecione a area para visualizar os modulos especificos.
-              </p>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              {areas.map((area) => {
-                const Icon = area.icon;
-                const active = areaAtual === area.key;
-
-                return (
-                  <button
-                    key={area.key}
-                    type="button"
-                    onClick={() => {
-                      setAreaAtual(area.key);
-                      if (area.key !== "odontologia") {
-                        showPreparationMessage(area.label);
-                      } else {
-                        setMensagem("");
-                      }
-                    }}
-                    className={
-                      active
-                        ? "inline-flex h-12 items-center gap-2 rounded-lg border border-indigo-400 bg-indigo-50 px-4 text-sm font-black text-indigo-700"
-                        : "inline-flex h-12 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-indigo-200"
-                    }
-                  >
-                    <Icon size={18} />
-                    {area.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 flex flex-col justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-700 md:flex-row md:items-center">
-              <span>
-                {areaAtual === "odontologia"
-                  ? "Voce esta acessando a area de Odontologia. Cada area possui informacoes e modulos especificos."
-                  : "Modulo em preparacao."}
-              </span>
-              <button
-                type="button"
-                onClick={() => showPreparationMessage("Alterar area")}
-                className="h-9 rounded-lg border border-indigo-300 bg-white px-3 text-xs font-black text-indigo-700"
-              >
-                Alterar area
-              </button>
-            </div>
-          </section>
-
           {mensagem && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black text-amber-800">
               {mensagem}
@@ -7809,25 +7725,6 @@ export default function PacienteProntuarioBase({
           {secaoAtual === "procedimentos" && renderProcedimentos()}
           {secaoAtual === "exames" && renderExames()}
           {secaoAtual === "documentos" && renderDocumentos()}
-          {secaoAtual !== "resumo" &&
-            secaoAtual !== "anamnese" &&
-            secaoAtual !== "evolucoes" &&
-            secaoAtual !== "odontograma" &&
-            secaoAtual !== "ohf" &&
-            secaoAtual !== "plano" &&
-            secaoAtual !== "procedimentos" &&
-            secaoAtual !== "exames" &&
-            secaoAtual !== "documentos" && (
-            <section className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
-              <h2 className="text-xl font-black text-slate-950">
-                {placeholderPorSecao[secaoAtual] ||
-                  "Esta secao sera implementada na proxima etapa."}
-              </h2>
-              <p className="mt-2 text-sm font-semibold text-slate-500">
-                A navegacao ja esta preparada por parametro de secao.
-              </p>
-            </section>
-          )}
         </div>
 
         <aside
@@ -7950,13 +7847,6 @@ export default function PacienteProntuarioBase({
               >
                 Nova evolução
               </Link>
-              <button
-                type="button"
-                onClick={() => showPreparationMessage("Nova prescricao")}
-                className="rounded-lg border border-slate-200 p-3 text-center text-xs font-black text-indigo-700"
-              >
-                Nova prescricao
-              </button>
               <Link
                 href={`/pacientes/${pacienteId}?aba=prontuario&secao=documentos`}
                 className="rounded-lg border border-slate-200 p-3 text-center text-xs font-black text-indigo-700"
@@ -7970,13 +7860,6 @@ export default function PacienteProntuarioBase({
               >
                 <Printer size={15} />
                 Imprimir
-              </button>
-              <button
-                type="button"
-                onClick={() => showPreparationMessage("Mais opcoes")}
-                className="rounded-lg border border-slate-200 p-3 text-center text-xs font-black text-indigo-700"
-              >
-                Mais opcoes
               </button>
             </div>
           </section>

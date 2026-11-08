@@ -8,13 +8,16 @@ import {
   BarChart3,
   CalendarDays,
   ClipboardList,
+  Crown,
   Eye,
   EyeOff,
   HeartPulse,
   Lock,
   Mail,
-  Plus,
+  ScanFace,
   ShieldCheck,
+  Smile,
+  Sparkles,
   Stethoscope,
   Users,
   WalletCards,
@@ -52,19 +55,19 @@ const recursos = [
     classe: "from-sky-400 to-blue-700",
   },
   {
-    titulo: "Seguro e Confiável",
-    descricao: "Seus dados protegidos com criptografia de ponta a ponta.",
+    titulo: "Privacidade e LGPD",
+    descricao: "Perfis de acesso e exclusão completa dos dados do paciente.",
     icon: ShieldCheck,
     classe: "from-emerald-400 to-cyan-700",
   },
 ];
 
 const areas = [
-  { nome: "Medicina", icon: Stethoscope, cor: "text-blue-300" },
-  { nome: "Odontologia", icon: HeartPulse, cor: "text-slate-100" },
-  { nome: "Psicologia", icon: ClipboardList, cor: "text-violet-300" },
-  { nome: "Fisioterapia", icon: Users, cor: "text-emerald-300" },
-  { nome: "Nutrição", icon: ShieldCheck, cor: "text-teal-300" },
+  { nome: "Clínica geral", icon: Smile, cor: "text-slate-100" },
+  { nome: "Ortodontia", icon: Sparkles, cor: "text-blue-300" },
+  { nome: "Implantes", icon: Crown, cor: "text-amber-200" },
+  { nome: "Endodontia", icon: Stethoscope, cor: "text-emerald-300" },
+  { nome: "HOF", icon: ScanFace, cor: "text-violet-300" },
 ];
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -129,25 +132,6 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function GoogleIcon() {
-  return (
-    <span className="text-2xl font-bold leading-none">
-      <span className="text-blue-600">G</span>
-    </span>
-  );
-}
-
-function MicrosoftIcon() {
-  return (
-    <span className="grid h-6 w-6 grid-cols-2 gap-0.5">
-      <span className="bg-red-500" />
-      <span className="bg-green-500" />
-      <span className="bg-blue-500" />
-      <span className="bg-yellow-400" />
-    </span>
-  );
-}
-
 export default function AuthScreen() {
   const [senhaVisivel, setSenhaVisivel] = useState(false);
 
@@ -157,7 +141,7 @@ export default function AuthScreen() {
         <div className="relative min-h-screen overflow-hidden bg-[#042b74] px-6 py-6 text-white sm:px-10 lg:px-12 xl:px-14">
           <Image
             src="/healthcare-hero.png"
-            alt="Profissionais de saúde usando o Clini+"
+            alt="Equipe odontológica usando o Clini+"
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 59vw"
@@ -178,7 +162,7 @@ export default function AuthScreen() {
               <h2 className="text-2xl font-extrabold leading-tight sm:text-3xl">
                 A plataforma completa para{" "}
                 <span className="text-emerald-300">
-                  profissionais de saúde
+                  clínicas odontológicas
                 </span>{" "}
                 e suas equipes
               </h2>
@@ -214,7 +198,7 @@ export default function AuthScreen() {
 
             <div className="mt-auto pt-6">
               <div className="ml-auto w-full max-w-[500px] rounded-3xl border border-white/15 bg-blue-950/40 px-6 py-4 text-center shadow-2xl shadow-slate-950/20 backdrop-blur">
-                <p className="text-sm font-bold">Para todas as áreas da saúde</p>
+                <p className="text-sm font-bold">Feito para a odontologia e HOF</p>
                 <div className="mt-4 grid grid-cols-5 gap-3">
                   {areas.map((area) => {
                     const Icon = area.icon;
@@ -231,34 +215,28 @@ export default function AuthScreen() {
                     );
                   })}
                 </div>
-                <div className="mt-3 flex flex-col items-center text-xs font-semibold">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-950/30">
-                    <Plus size={16} />
-                  </span>
-                  <span className="mt-2">E muito mais</span>
-                </div>
               </div>
 
               <div className="mt-6 grid gap-4 border-t border-white/20 pt-5 text-sm font-semibold text-blue-50 sm:grid-cols-3">
                 <div className="flex items-center gap-3">
                   <Users className="shrink-0 text-blue-300" size={30} />
                   <span>
-                    <strong className="block text-white">+10.000</strong>
-                    profissionais confiam
+                    <strong className="block text-white">Odontograma</strong>
+                    interativo por dente e face
                   </span>
                 </div>
                 <div className="flex items-center gap-3 sm:border-l sm:border-white/20 sm:pl-6">
                   <HeartPulse className="shrink-0 text-blue-300" size={30} />
                   <span>
-                    <strong className="block text-white">+1 milhão</strong>
-                    de atendimentos gerenciados
+                    <strong className="block text-white">Orçamentos</strong>
+                    gerados do plano de tratamento
                   </span>
                 </div>
                 <div className="flex items-center gap-3 sm:border-l sm:border-white/20 sm:pl-6">
                   <ShieldCheck className="shrink-0 text-blue-300" size={30} />
                   <span>
-                    <strong className="block text-white">Sistema 100%</strong>
-                    em nuvem, sempre com você
+                    <strong className="block text-white">WhatsApp</strong>
+                    para confirmar e lembrar pacientes
                   </span>
                 </div>
               </div>
@@ -325,42 +303,19 @@ export default function AuthScreen() {
                   />
                   Lembrar-me
                 </label>
-                <Link href="/cadastro" className="text-blue-700">
-                  Esqueci minha senha
-                </Link>
               </div>
 
               <Link
-                href="/dashboard?modo=assinatura&plano=starter&profissao=odontologia&demo=1"
+                href="/dashboard?modo=assinatura&plano=premium&demo=1"
                 className="flex h-14 w-full items-center justify-center gap-4 rounded-xl bg-gradient-to-r from-blue-700 to-teal-500 px-6 text-xl font-extrabold text-white shadow-xl shadow-blue-500/25 transition hover:brightness-110"
               >
-                Entrar
+                Entrar na demonstração
                 <ArrowRight size={28} />
               </Link>
+              <p className="text-center text-xs font-semibold text-slate-500">
+                Versão de demonstração: o acesso não exige senha e os dados ficam neste navegador.
+              </p>
             </form>
-
-            <div className="my-6 flex items-center gap-4 text-sm font-semibold text-slate-400">
-              <span className="h-px flex-1 bg-slate-200" />
-              ou continue com
-              <span className="h-px flex-1 bg-slate-200" />
-            </div>
-
-            <div className="space-y-3">
-              <button
-                type="button"
-                className="flex h-[52px] w-full items-center justify-center gap-4 rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-bold text-[#071b4d] shadow-sm transition hover:bg-slate-50"
-              >
-                <GoogleIcon />
-                Entrar com Google
-              </button>
-              <button
-                type="button"
-                className="flex h-[52px] w-full items-center justify-center gap-4 rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-bold text-[#071b4d] shadow-sm transition hover:bg-slate-50"
-              >
-                <MicrosoftIcon />
-                Entrar com Microsoft
-              </button>
-            </div>
 
             <p className="mt-6 text-center text-sm font-semibold text-slate-500">
               Ainda não tem uma conta?
@@ -373,11 +328,11 @@ export default function AuthScreen() {
               <ShieldCheck className="shrink-0 text-[#071b4d]" size={38} />
               <div>
                 <p className="font-extrabold text-[#071b4d]">
-                  Seus dados estão protegidos
+                  Privacidade dos pacientes
                 </p>
                 <p className="mt-1 text-sm font-medium leading-relaxed text-slate-500">
-                  Segurança e privacidade em primeiro lugar. Criptografia de
-                  ponta a ponta e conformidade com a LGPD.
+                  Acesso por perfil, consentimentos registrados na ficha e
+                  exclusão completa dos dados quando o paciente pedir.
                 </p>
               </div>
             </div>

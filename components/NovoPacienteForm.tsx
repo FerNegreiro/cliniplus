@@ -6,13 +6,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  CalendarDays,
   Check,
   ChevronRight,
   FileText,
   Heart,
   IdCard,
-  MapPin,
   Phone,
   Search,
   ShieldCheck,
@@ -28,6 +26,13 @@ import {
   getPacientes,
   type CliniplusPaciente,
 } from "@/utils/cliniplusStore";
+import {
+  TIPOS_ACEITOS,
+  extensaoDoArquivo,
+  formatarTamanho,
+  salvarArquivo,
+  validarArquivo,
+} from "@/utils/arquivos";
 
 type AcaoSalvar = "lista" | "prontuario" | "agenda" | "rascunho";
 
@@ -39,6 +44,7 @@ type FormState = {
   genero: string;
   estadoCivil: string;
   profissao: string;
+  atendimento: string;
   tags: string[];
   origem: string;
   celular: string;
@@ -84,6 +90,7 @@ const estadoInicial: FormState = {
   genero: "",
   estadoCivil: "",
   profissao: "",
+  atendimento: "Odontologia",
   tags: [],
   origem: "",
   celular: "",
@@ -171,6 +178,8 @@ export default function NovoPacienteForm() {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(estadoInicial);
   const [erro, setErro] = useState("");
+  const [arquivos, setArquivos] = useState<Record<string, File>>({});
+  const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [etapaAtiva, setEtapaAtiva] = useState("identificacao");
 
@@ -226,6 +235,42 @@ export default function NovoPacienteForm() {
     setForm((atual) => ({ ...atual, [campo]: valor }));
   }
 
+  async function buscarCep() {
+    const cep = form.cep.replace(/\D/g, "");
+
+    if (cep.length !== 8) {
+      setMensagem("Digite um CEP com 8 numeros.");
+      return;
+    }
+
+    try {
+      const resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const dados = (await resposta.json()) as {
+        erro?: boolean;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+      };
+
+      if (dados.erro) {
+        setMensagem("CEP nao encontrado.");
+        return;
+      }
+
+      setForm((atual) => ({
+        ...atual,
+        endereco: dados.logradouro || atual.endereco,
+        bairro: dados.bairro || atual.bairro,
+        cidade: dados.localidade || atual.cidade,
+        uf: dados.uf || atual.uf,
+      }));
+      setMensagem("Endereco preenchido pelo CEP.");
+    } catch {
+      setMensagem("Nao foi possivel consultar o CEP agora.");
+    }
+  }
+
   function alternarTag(tag: string) {
     setForm((atual) => ({
       ...atual,
@@ -236,14 +281,34 @@ export default function NovoPacienteForm() {
     }));
   }
 
-  function alternarDocumento(nome: string) {
+  function selecionarArquivo(nome: string, arquivo: File | undefined) {
+    if (!arquivo) return;
+    const problema = validarArquivo(arquivo);
+    if (problema) {
+      setMensagem(`${nome}: ${problema}`);
+      return;
+    }
+
+    setArquivos((atual) => ({ ...atual, [nome]: arquivo }));
     setForm((atual) => ({
       ...atual,
       documentosChecklist: atual.documentosChecklist.includes(nome)
-        ? atual.documentosChecklist.filter((item) => item !== nome)
+        ? atual.documentosChecklist
         : [...atual.documentosChecklist, nome],
     }));
-    setMensagem("Documento marcado como anexado.");
+    setMensagem(`${nome}: ${arquivo.name} pronto para envio.`);
+  }
+
+  function removerArquivoSelecionado(nome: string) {
+    setArquivos((atual) => {
+      const proximo = { ...atual };
+      delete proximo[nome];
+      return proximo;
+    });
+    setForm((atual) => ({
+      ...atual,
+      documentosChecklist: atual.documentosChecklist.filter((item) => item !== nome),
+    }));
   }
 
   function rolarPara(id: string) {
@@ -263,7 +328,8 @@ export default function NovoPacienteForm() {
     return true;
   }
 
-  function salvar(acao: AcaoSalvar) {
+  async function salvar(acao: AcaoSalvar) {
+    if (salvando) return;
     setErro("");
     const validacao = validar(acao);
     if (validacao !== true) {
@@ -318,24 +384,40 @@ export default function NovoPacienteForm() {
       documentosChecklist: form.documentosChecklist,
       observacoesInternas: form.observacoesInternas,
       observacoes: form.observacoesImportantes,
-      area: form.profissao || "Cadastro inicial",
-      tipoAtendimento: "odontologia",
+      area: form.atendimento,
+      tipoAtendimento: form.atendimento === "HOF" ? "estetica" : "odontologia",
       status: acao === "rascunho" ? "rascunho" : "Ativo",
       ultimo: new Date().toLocaleDateString("pt-BR"),
       criadoEm: hojeIso(),
     }) as CliniplusPaciente;
 
-    form.documentosChecklist.forEach((documento) => {
-      addDocumento({
-        pacienteId: paciente.id,
-        paciente: paciente.nome,
-        nome: documento,
-        tipo: "Cadastro",
-        data: new Date().toLocaleDateString("pt-BR"),
-        origem: "Novo paciente",
-        status: "Anexado",
-      });
-    });
+    setSalvando(true);
+    try {
+      await Promise.all(
+        Object.entries(arquivos).map(async ([documento, arquivo]) => {
+          const salvo = await salvarArquivo(arquivo, paciente.id);
+          addDocumento({
+            pacienteId: paciente.id,
+            paciente: paciente.nome,
+            nome: documento,
+            categoria: "Cadastro",
+            tipo: "Cadastro",
+            origem: "Novo paciente",
+            status: "Anexado",
+            arquivoId: salvo.id,
+            formato: extensaoDoArquivo(arquivo.name),
+            extensao: extensaoDoArquivo(arquivo.name),
+            tamanho: formatarTamanho(arquivo.size),
+            observacao: arquivo.name,
+          });
+        })
+      );
+    } catch {
+      setErro("O paciente foi salvo, mas algum arquivo não pôde ser guardado. Envie de novo pela ficha dele.");
+      setSalvando(false);
+      return;
+    }
+    setSalvando(false);
 
     if (acao === "prontuario") {
       router.push(`/pacientes/${paciente.id}?aba=prontuario`);
@@ -393,6 +475,7 @@ export default function NovoPacienteForm() {
               <Select label="Sexo / genero *" value={form.genero} onChange={(v) => atualizar("genero", v)} options={["", "Feminino", "Masculino", "Outro", "Prefiro nao informar"]} />
               <Select label="Estado civil" value={form.estadoCivil} onChange={(v) => atualizar("estadoCivil", v)} options={["", "Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viuvo(a)"]} />
               <Input label="Profissao" value={form.profissao} onChange={(v) => atualizar("profissao", v)} placeholder="Ex.: Designer" />
+              <Select label="Tipo de atendimento *" value={form.atendimento} onChange={(v) => atualizar("atendimento", v)} options={["Odontologia", "HOF"]} />
               <Select label="Origem / Indicacao" value={form.origem} onChange={(v) => atualizar("origem", v)} options={["", "Google", "Instagram", "Indicação", "Convenio", "Retorno"]} />
               <div className="lg:col-span-4">
                 <p className="mb-2 text-xs font-black text-slate-500">Tags</p>
@@ -427,7 +510,7 @@ export default function NovoPacienteForm() {
                 <label className="mb-2 block text-xs font-black text-slate-500">CEP</label>
                 <div className="flex h-11 rounded-lg border border-slate-200 bg-white">
                   <input value={form.cep} onChange={(e) => atualizar("cep", e.target.value)} placeholder="00000-000" className="min-w-0 flex-1 rounded-l-lg px-3 text-sm font-semibold outline-none" />
-                  <button type="button" onClick={() => setMensagem("Busca de CEP sera integrada em breve.")} className="flex w-11 items-center justify-center text-indigo-700">
+                  <button type="button" onClick={buscarCep} className="flex w-11 items-center justify-center text-indigo-700">
                     <Search size={17} />
                   </button>
                 </div>
@@ -437,7 +520,7 @@ export default function NovoPacienteForm() {
               <Input label="Complemento" value={form.complemento} onChange={(v) => atualizar("complemento", v)} placeholder="Apto, sala, etc." />
               <Input label="Bairro" value={form.bairro} onChange={(v) => atualizar("bairro", v)} placeholder="Digite o bairro" />
               <Input label="Cidade" value={form.cidade} onChange={(v) => atualizar("cidade", v)} placeholder="Cidade" />
-              <Select label="UF" value={form.uf} onChange={(v) => atualizar("uf", v)} options={["", "AC", "AL", "AM", "BA", "CE", "DF", "ES", "GO", "MG", "PE", "PR", "RJ", "RS", "SC", "SP"]} />
+              <Select label="UF" value={form.uf} onChange={(v) => atualizar("uf", v)} options={["", "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"]} />
             </div>
           </Section>
 
@@ -455,7 +538,7 @@ export default function NovoPacienteForm() {
           <div className="grid gap-6 xl:grid-cols-2">
             <Section id="convenio" title="4. Convenio e financeiro" icon={ShieldCheck}>
               <div className="grid gap-4 md:grid-cols-4">
-                <Select label="Convenio" value={form.convenio} onChange={(v) => atualizar("convenio", v)} options={["", "Particular", "Amil", "Unimed", "Bradesco Saude", "SulAmerica", "Hapvida", "Outro"]} />
+                <Select label="Convenio" value={form.convenio} onChange={(v) => atualizar("convenio", v)} options={["", "Particular", "Amil Dental", "Bradesco Dental", "OdontoPrev", "SulAmerica Odonto", "Hapvida Odonto", "Uniodonto", "Outro"]} />
                 <Input label="Plano" value={form.planoConvenio} onChange={(v) => atualizar("planoConvenio", v)} placeholder="Selecione o plano" />
                 <Input label="No da carteirinha" value={form.numeroCarteirinha} onChange={(v) => atualizar("numeroCarteirinha", v)} placeholder="000000000000" />
                 <Input label="Validade" type="month" value={form.validadeCarteirinha} onChange={(v) => atualizar("validadeCarteirinha", v)} />
@@ -485,27 +568,47 @@ export default function NovoPacienteForm() {
           <Section id="documentos-cards" title="7. Documentos" icon={FileText}>
             <div className="grid gap-3 md:grid-cols-5">
               {documentos.map((documento) => {
-                const anexado = form.documentosChecklist.includes(documento);
+                const arquivo = arquivos[documento];
                 return (
-                  <button
+                  <div
                     key={documento}
-                    type="button"
-                    onClick={() => alternarDocumento(documento)}
-                    className={`rounded-lg border border-dashed p-4 text-left transition ${
-                      anexado
+                    className={`relative rounded-lg border border-dashed p-4 text-left transition ${
+                      arquivo
                         ? "border-emerald-300 bg-emerald-50"
                         : "border-slate-200 bg-white hover:border-indigo-300"
                     }`}
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-                      {anexado ? <Check size={17} /> : <Upload size={17} />}
-                    </span>
-                    <strong className="mt-3 block text-sm">{documento}</strong>
-                    <span className="mt-1 block text-xs font-semibold text-indigo-700">
-                      {anexado ? "Anexado" : "Enviar arquivo"}
-                    </span>
-                    <span className="text-xs text-slate-500">PDF, JPG ou PNG</span>
-                  </button>
+                    <label className="block cursor-pointer">
+                      <input
+                        type="file"
+                        accept={TIPOS_ACEITOS}
+                        className="sr-only"
+                        onChange={(event) => {
+                          selecionarArquivo(documento, event.target.files?.[0]);
+                          event.target.value = "";
+                        }}
+                      />
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
+                        {arquivo ? <Check size={17} /> : <Upload size={17} />}
+                      </span>
+                      <strong className="mt-3 block text-sm">{documento}</strong>
+                      <span className="mt-1 block truncate text-xs font-semibold text-indigo-700">
+                        {arquivo ? arquivo.name : "Enviar arquivo"}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {arquivo ? formatarTamanho(arquivo.size) : "PDF, JPG ou PNG até 15 MB"}
+                      </span>
+                    </label>
+                    {arquivo && (
+                      <button
+                        type="button"
+                        onClick={() => removerArquivoSelecionado(documento)}
+                        className="mt-2 text-xs font-bold text-rose-600"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>

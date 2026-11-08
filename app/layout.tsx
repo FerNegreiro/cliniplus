@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Clini+",
-  description: "Gestão moderna para profissionais da saúde",
+  description: "Gestão para clínicas odontológicas e HOF",
 };
 
 export default function RootLayout({

@@ -6,20 +6,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  Bell,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Columns3,
   Download,
   FileText,
   Filter,
   Folder,
-  Grid2X2,
   HeartPulse,
-  Import,
   Mail,
   MessageSquare,
   MoreHorizontal,
@@ -40,8 +35,6 @@ import {
   type CliniplusPaciente,
   type CliniplusProntuario,
   type CliniplusTratamento,
-  type StoreId,
-  getAgendamentos,
   getAgendamentosByPacienteId,
   getDocumentos,
   getDocumentosByPacienteId,
@@ -51,7 +44,9 @@ import {
   getProntuarioByPacienteId,
   getTratamentos,
   getTratamentosByPacienteId,
+  type StoreId,
 } from "@/utils/cliniplusStore";
+import { normalizarTexto } from "@/utils/format";
 
 type PacienteCompleto = CliniplusPaciente & {
   cpf?: string;
@@ -82,17 +77,9 @@ type PacienteInsights = {
 };
 
 const statusFiltros = ["Todos", "Ativo", "Em tratamento", "Retorno pendente", "Inativo"];
-const unidades = ["Todas", "Clinica principal", "Consultorio 01", "Consultorio 02", "Online"];
 const ultimaConsultaFiltros = ["Todas", "Com consulta", "Sem consulta"];
 const pendenciasFiltros = ["Todas", "Com pendencias", "Sem pendencias"];
 const abas = ["Todos", "Ativos", "Novos", "Pendentes", "Alto risco"];
-
-function normalizar(valor?: string) {
-  return (valor || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
 
 function sameId(a?: StoreId | null, b?: StoreId | null) {
   return String(a) === String(b);
@@ -154,7 +141,7 @@ function getIdade(paciente: PacienteCompleto) {
 }
 
 function statusClasse(status: string) {
-  const texto = normalizar(status);
+  const texto = normalizarTexto(status);
 
   if (texto.includes("ativo")) return "bg-emerald-100 text-emerald-700";
   if (texto.includes("tratamento")) return "bg-blue-100 text-blue-700";
@@ -164,7 +151,7 @@ function statusClasse(status: string) {
 }
 
 function tagClasse(tag: string) {
-  const texto = normalizar(tag);
+  const texto = normalizarTexto(tag);
 
   if (texto.includes("alerg")) return "bg-rose-100 text-rose-700";
   if (texto.includes("vip")) return "bg-amber-100 text-amber-700";
@@ -179,13 +166,13 @@ function getTagsPaciente(
   financeiro: CliniplusLancamentoFinanceiro[]
 ) {
   const tags = [...(paciente.tags || [])];
-  const observacoes = normalizar(paciente.observacoes);
+  const observacoes = normalizarTexto(paciente.observacoes);
 
   if (observacoes.includes("alerg") || paciente.alergias) tags.push("Alergia");
-  if (financeiro.some((item) => normalizar(item.status).includes("pendente"))) {
+  if (financeiro.some((item) => normalizarTexto(item.status).includes("pendente"))) {
     tags.push("Financeiro");
   }
-  if (documentos.some((item) => normalizar(item.status).includes("pendente"))) {
+  if (documentos.some((item) => normalizarTexto(item.status).includes("pendente"))) {
     tags.push("Documento");
   }
 
@@ -217,22 +204,19 @@ function montarInsights(paciente: PacienteCompleto, hoje: string): PacienteInsig
     .find((item) => item.data <= hoje);
   const proximaConsulta = agendamentos.find((item) => item.data > hoje);
   const documentosPendentes = documentos.some((item) =>
-    normalizar(item.status).includes("pendente")
+    normalizarTexto(item.status).includes("pendente")
   );
   const financeiroPendente = financeiro.some((item) =>
-    normalizar(item.status).includes("pendente")
-  );
-  const tratamentoAtivo = tratamentos.some((item) =>
-    ["em andamento", "planejado", "urgente"].includes(normalizar(item.status))
+    normalizarTexto(item.status).includes("pendente")
   );
   const retornoPendente =
-    normalizar(paciente.status).includes("retorno") ||
-    agendamentos.some((item) => normalizar(item.status).includes("aguard"));
+    normalizarTexto(paciente.status).includes("retorno") ||
+    agendamentos.some((item) => normalizarTexto(item.status).includes("aguard"));
   const tags = getTagsPaciente(paciente, documentos, financeiro);
   const altoRisco =
-    tags.some((tag) => normalizar(tag).includes("risco")) ||
-    normalizar(paciente.observacoes).includes("risco") ||
-    normalizar(paciente.alergias).includes("grave");
+    tags.some((tag) => normalizarTexto(tag).includes("risco")) ||
+    normalizarTexto(paciente.observacoes).includes("risco") ||
+    normalizarTexto(paciente.alergias).includes("grave");
 
   return {
     ultimaConsulta,
@@ -271,14 +255,12 @@ function getResumoProntuario(prontuario: CliniplusProntuario | null) {
 export default function Pacientes() {
   const router = useRouter();
   const [pacientes, setPacientes] = useState<PacienteCompleto[]>([]);
-  const [agendamentos, setAgendamentos] = useState<CliniplusAgendamento[]>([]);
   const [documentos, setDocumentos] = useState<CliniplusDocumento[]>([]);
   const [tratamentos, setTratamentos] = useState<CliniplusTratamento[]>([]);
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("Todos");
   const [profissional, setProfissional] = useState("Todos");
   const [convenio, setConvenio] = useState("Todos");
-  const [unidade, setUnidade] = useState("Todas");
   const [tag, setTag] = useState("Todas");
   const [ultimaConsulta, setUltimaConsulta] = useState("Todas");
   const [pendencias, setPendencias] = useState("Todas");
@@ -290,12 +272,16 @@ export default function Pacientes() {
   useEffect(() => {
     const carregar = () => {
       setPacientes(getPacientes() as PacienteCompleto[]);
-      setAgendamentos(getAgendamentos());
       setDocumentos(getDocumentos());
       setTratamentos(getTratamentos());
     };
 
     carregar();
+    const buscaDaUrl = new URLSearchParams(window.location.search).get("busca");
+    if (buscaDaUrl) {
+      setBusca(buscaDaUrl);
+    }
+
     window.addEventListener("cliniplus:store", carregar);
     window.addEventListener("storage", carregar);
     return () => {
@@ -344,11 +330,11 @@ export default function Pacientes() {
   );
 
   const pacientesFiltrados = useMemo(() => {
-    const termo = normalizar(busca.trim());
+    const termo = normalizarTexto(busca.trim());
 
     return pacientes.filter((paciente) => {
       const insights = insightsPorPaciente[String(paciente.id)];
-      const textoBusca = normalizar(
+      const textoBusca = normalizarTexto(
         [
           paciente.nome,
           paciente.telefone,
@@ -364,9 +350,6 @@ export default function Pacientes() {
       if (status !== "Todos" && paciente.status !== status) return false;
       if (profissional !== "Todos" && insights?.profissional !== profissional) return false;
       if (convenio !== "Todos" && paciente.convenio !== convenio) return false;
-      if (unidade !== "Todas" && (paciente.unidade || "Clinica principal") !== unidade) {
-        return false;
-      }
       if (tag !== "Todas" && !insights?.tags.includes(tag)) return false;
       if (ultimaConsulta === "Com consulta" && !insights?.ultimaConsulta) return false;
       if (ultimaConsulta === "Sem consulta" && insights?.ultimaConsulta) return false;
@@ -391,12 +374,11 @@ export default function Pacientes() {
     status,
     tag,
     ultimaConsulta,
-    unidade,
   ]);
 
   useEffect(() => {
     setPagina(1);
-  }, [aba, busca, convenio, pendencias, profissional, status, tag, ultimaConsulta, unidade]);
+  }, [aba, busca, convenio, pendencias, profissional, status, tag, ultimaConsulta]);
 
   useEffect(() => {
     if (!pacientesFiltrados.length) {
@@ -430,13 +412,13 @@ export default function Pacientes() {
   ).length;
   const retornoPendente = pacientes.filter((item) => {
     const insights = insightsPorPaciente[String(item.id)];
-    return normalizar(item.status).includes("retorno") || insights?.pendente;
+    return normalizarTexto(item.status).includes("retorno") || insights?.pendente;
   }).length;
   const documentosPendentes = documentos.filter((item) =>
-    normalizar(item.status).includes("pendente")
+    normalizarTexto(item.status).includes("pendente")
   ).length;
   const emAcompanhamento = tratamentos.filter((item) =>
-    ["em andamento", "planejado", "urgente"].includes(normalizar(item.status))
+    ["em andamento", "planejado", "urgente"].includes(normalizarTexto(item.status))
   ).length;
 
   function exportarCsv() {
@@ -489,24 +471,13 @@ export default function Pacientes() {
                 />
               </label>
 
-              <button
-                type="button"
-                className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-700 shadow-sm"
-                aria-label="Notificacoes"
-              >
-                <Bell size={19} />
-                {retornoPendente > 0 && (
-                  <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMensagem("Central de mensagens aberta para pacientes.")}
+              <Link
+                href="/comunicacao"
                 className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-700 shadow-sm"
-                aria-label="Mensagens"
+                aria-label="Comunicação"
               >
                 <MessageSquare size={19} />
-              </button>
+              </Link>
               <Link
                 href="/pacientes/novo"
                 className="inline-flex h-11 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-indigo-700"
@@ -525,25 +496,16 @@ export default function Pacientes() {
           )}
 
           <section className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:grid-cols-[1fr_auto]">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <SelectFiltro label="Status" value={status} onChange={setStatus} options={statusFiltros} />
               <SelectFiltro label="Profissional" value={profissional} onChange={setProfissional} options={["Todos", ...opcoesProfissionais]} />
               <SelectFiltro label="Convenio" value={convenio} onChange={setConvenio} options={["Todos", ...opcoesConvenio]} />
-              <SelectFiltro label="Unidade" value={unidade} onChange={setUnidade} options={unidades} />
               <SelectFiltro label="Tags" value={tag} onChange={setTag} options={["Todas", ...opcoesTags]} />
               <SelectFiltro label="Ultima consulta" value={ultimaConsulta} onChange={setUltimaConsulta} options={ultimaConsultaFiltros} />
               <SelectFiltro label="Pendencias" value={pendencias} onChange={setPendencias} options={pendenciasFiltros} />
             </div>
 
             <div className="flex flex-wrap gap-2 xl:justify-end">
-              <button
-                type="button"
-                onClick={() => setMensagem("Importacao sera adicionada em breve.")}
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-extrabold text-indigo-700"
-              >
-                <Import size={17} />
-                Importar
-              </button>
               <button
                 type="button"
                 onClick={exportarCsv}
@@ -558,7 +520,6 @@ export default function Pacientes() {
                   setStatus("Todos");
                   setProfissional("Todos");
                   setConvenio("Todos");
-                  setUnidade("Todas");
                   setTag("Todas");
                   setUltimaConsulta("Todas");
                   setPendencias("Todas");
@@ -567,7 +528,7 @@ export default function Pacientes() {
                 className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-extrabold text-indigo-700"
               >
                 <Filter size={17} />
-                Filtros
+                Limpar filtros
               </button>
             </div>
           </section>
@@ -576,7 +537,7 @@ export default function Pacientes() {
             <ResumoCard titulo="Pacientes ativos" valor={pacientesAtivos} detalhe="Base em acompanhamento" icon={Users} classe="bg-indigo-600" />
             <ResumoCard titulo="Novos este mes" valor={novosEsteMes} detalhe="Sem historico ainda" icon={UserRound} classe="bg-emerald-500" />
             <ResumoCard titulo="Retorno pendente" valor={retornoPendente} detalhe="Acoes em aberto" icon={CalendarDays} classe="bg-orange-400" />
-            <ResumoCard titulo="Documentos pendentes" valor={documentosPendentes} detalhe="Documentos da store" icon={FileText} classe="bg-rose-500" />
+            <ResumoCard titulo="Documentos pendentes" valor={documentosPendentes} detalhe="Aguardando envio ou assinatura" icon={FileText} classe="bg-rose-500" />
             <ResumoCard titulo="Em acompanhamento" valor={emAcompanhamento} detalhe="Tratamentos ativos" icon={Activity} classe="bg-blue-600" />
           </section>
 
@@ -618,25 +579,13 @@ export default function Pacientes() {
                   })}
                 </div>
 
-                <div className="flex items-center gap-2 text-sm font-extrabold text-indigo-700">
-                  <button type="button" className="inline-flex h-9 items-center gap-2 rounded-lg px-3 hover:bg-indigo-50">
-                    <Columns3 size={16} />
-                    Selecionar colunas
-                  </button>
-                  <button type="button" className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50">
-                    <Grid2X2 size={16} />
-                  </button>
-                </div>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="min-w-[1100px] w-full text-left text-sm">
                   <thead className="border-b border-slate-200 text-xs font-black text-slate-500">
                     <tr>
-                      <th className="w-12 px-4 py-3">
-                        <input type="checkbox" className="h-4 w-4 accent-indigo-600" />
-                      </th>
-                      <th className="px-3 py-3">Paciente / Prontuario</th>
+                      <th className="px-4 py-3">Paciente / Prontuario</th>
                       <th className="px-3 py-3">Idade / Tags</th>
                       <th className="px-3 py-3">Contato</th>
                       <th className="px-3 py-3">Profissional / Especialidade</th>
@@ -655,19 +604,14 @@ export default function Pacientes() {
                       return (
                         <tr
                           key={String(paciente.id)}
-                          onClick={() => router.push(`/pacientes/${paciente.id}`)}
+                          onClick={() => setSelecionadoId(paciente.id)}
+                          onDoubleClick={() => router.push(`/pacientes/${paciente.id}`)}
+                          title="Clique para ver o resumo. Clique duas vezes para abrir o cadastro."
                           className={`cursor-pointer transition hover:bg-indigo-50/50 ${
                             ativo ? "bg-indigo-50 ring-1 ring-inset ring-indigo-200" : ""
                           }`}
                         >
                           <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-indigo-600"
-                              onClick={(event) => event.stopPropagation()}
-                            />
-                          </td>
-                          <td className="px-3 py-3">
                             <div className="flex items-center gap-3">
                               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-black text-indigo-700">
                                 {getIniciais(paciente.nome)}
@@ -768,7 +712,10 @@ export default function Pacientes() {
                               </Link>
                               <button
                                 type="button"
-                                onClick={() => setSelecionadoId(paciente.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelecionadoId(paciente.id);
+                                }}
                                 className="flex h-8 w-8 items-center justify-center rounded-lg text-indigo-700"
                                 title="Ver mais"
                               >
@@ -824,27 +771,26 @@ export default function Pacientes() {
             <PainelPaciente paciente={selecionado} insights={insightsSelecionado} />
           </section>
 
+          {retornoPendente > 0 && (
           <section className="mt-5 flex flex-col gap-3 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-indigo-700">
                 <Sparkles size={18} />
               </span>
               <p className="min-w-0 text-sm font-bold text-indigo-900">
-                <strong>IA do Clini+:</strong> Identificamos pacientes com retorno pendente, documentos incompletos ou sem acompanhamento recente.
+                <strong>{retornoPendente} paciente(s) pendente(s):</strong> retorno em aberto ou pendencias no cadastro.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setAba("Pendentes");
-                setMensagem("Sugestoes aplicadas: exibindo pacientes pendentes.");
-              }}
+              onClick={() => setAba("Pendentes")}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-black text-indigo-700"
             >
-              Ver sugestoes
+              Ver pendentes
               <ChevronRight size={16} />
             </button>
           </section>
+          )}
         </section>
       </div>
     </main>
@@ -937,7 +883,7 @@ function PainelPaciente({
         tipo: "agenda",
       })),
     ...insights.tratamentos
-      .filter((item) => ["em andamento", "planejado", "urgente"].includes(normalizar(item.status)))
+      .filter((item) => ["em andamento", "planejado", "urgente"].includes(normalizarTexto(item.status)))
       .slice(0, 2)
       .map((item) => ({
         titulo: item.descricao,
@@ -945,7 +891,7 @@ function PainelPaciente({
         tipo: "tratamento",
       })),
     ...insights.documentos
-      .filter((item) => normalizar(item.status).includes("pendente"))
+      .filter((item) => normalizarTexto(item.status).includes("pendente"))
       .slice(0, 2)
       .map((item) => ({
         titulo: item.nome,
@@ -1018,7 +964,7 @@ function PainelPaciente({
             <MessageSquare size={15} />
             Enviar mensagem
           </Link>
-          <Link href={`/agenda/novo?pacienteId=${paciente.id}&paciente=${encodeURIComponent(paciente.nome)}&tipo=teleconsulta`} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-black text-slate-700">
+          <Link href={`/agenda/novo?pacienteId=${paciente.id}&paciente=${encodeURIComponent(paciente.nome)}&tipo=Teleconsulta`} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-black text-slate-700">
             <Video size={15} />
             Teleconsulta
           </Link>

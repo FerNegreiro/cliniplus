@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useState } from "react";
 import {
   ArrowRight,
+  Baby,
   BarChart3,
   CalendarDays,
   ChevronDown,
   ClipboardList,
+  Crown,
   Eye,
   EyeOff,
   HeartPulse,
@@ -16,8 +18,10 @@ import {
   Mail,
   MessageCircle,
   Phone,
-  Plus,
+  ScanFace,
   ShieldCheck,
+  Smile,
+  Sparkles,
   Stethoscope,
   User,
   Users,
@@ -64,12 +68,12 @@ const recursos = [
 ];
 
 const areas = [
-  { nome: "Medicina", icon: Stethoscope, cor: "text-blue-300" },
-  { nome: "Odontologia", icon: HeartPulse, cor: "text-slate-100" },
-  { nome: "Psicologia", icon: ClipboardList, cor: "text-violet-300" },
-  { nome: "Fisioterapia", icon: Users, cor: "text-emerald-300" },
-  { nome: "Nutrição", icon: ShieldCheck, cor: "text-teal-300" },
-  { nome: "Fonoaudiologia", icon: MessageCircle, cor: "text-violet-300" },
+  { nome: "Clínica geral", icon: Smile, cor: "text-slate-100" },
+  { nome: "Ortodontia", icon: Sparkles, cor: "text-blue-300" },
+  { nome: "Implantes", icon: Crown, cor: "text-amber-200" },
+  { nome: "Endodontia", icon: Stethoscope, cor: "text-emerald-300" },
+  { nome: "Odontopediatria", icon: Baby, cor: "text-teal-300" },
+  { nome: "HOF", icon: ScanFace, cor: "text-violet-300" },
 ];
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -134,29 +138,12 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function GoogleIcon() {
-  return (
-    <span className="text-2xl font-bold leading-none text-blue-600">G</span>
-  );
-}
-
-function MicrosoftIcon() {
-  return (
-    <span className="grid h-5 w-5 grid-cols-2 gap-0.5">
-      <span className="bg-red-500" />
-      <span className="bg-green-500" />
-      <span className="bg-blue-500" />
-      <span className="bg-yellow-400" />
-    </span>
-  );
-}
-
 export default function Cadastro() {
   const [senhaVisivel, setSenhaVisivel] = useState(false);
   const [confirmacaoVisivel, setConfirmacaoVisivel] = useState(false);
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [profissao, setProfissao] = useState("");
+  const [especialidade, setEspecialidade] = useState("");
   const [telefone, setTelefone] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmacaoSenha, setConfirmacaoSenha] = useState("");
@@ -164,7 +151,7 @@ export default function Cadastro() {
   const cadastroCompleto = Boolean(
     nome.trim() &&
       email.trim() &&
-      profissao &&
+      especialidade &&
       telefone.trim() &&
       senha &&
       confirmacaoSenha &&
@@ -177,7 +164,7 @@ export default function Cadastro() {
         <div className="relative min-h-screen overflow-hidden bg-[#042b74] px-6 py-6 text-white sm:px-10 lg:px-12 xl:px-14">
           <Image
             src="/signup-healthcare-team.png"
-            alt="Equipe de profissionais de saúde usando o Clini+"
+            alt="Equipe odontológica usando o Clini+"
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 62vw"
@@ -198,7 +185,7 @@ export default function Cadastro() {
               <h2 className="text-3xl font-extrabold leading-tight sm:text-4xl">
                 A plataforma completa para{" "}
                 <span className="text-emerald-300">
-                  profissionais da saúde
+                  clínicas odontológicas
                 </span>
               </h2>
               <p className="mt-4 max-w-[470px] text-base font-medium leading-relaxed text-blue-50">
@@ -234,7 +221,7 @@ export default function Cadastro() {
             <div className="mt-auto pt-6">
               <div className="ml-auto w-full max-w-[660px] rounded-3xl border border-white/15 bg-blue-950/40 px-7 py-4 text-center shadow-2xl shadow-slate-950/20 backdrop-blur">
                 <p className="text-base font-bold">
-                  Para todas as áreas da saúde
+                  Feito para a odontologia e HOF
                 </p>
                 <div className="mt-4 grid grid-cols-3 gap-4 sm:grid-cols-6">
                   {areas.map((area) => {
@@ -252,34 +239,28 @@ export default function Cadastro() {
                     );
                   })}
                 </div>
-                <div className="mt-3 flex flex-col items-center text-xs font-semibold">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-950/30">
-                    <Plus size={16} />
-                  </span>
-                  <span className="mt-2">E muitas outras</span>
-                </div>
               </div>
 
               <div className="mt-6 grid gap-4 border-t border-white/20 pt-5 text-sm font-semibold text-blue-50 sm:grid-cols-3">
                 <div className="flex items-center gap-3">
                   <Users className="shrink-0 text-blue-300" size={30} />
                   <span>
-                    <strong className="block text-white">+10.000</strong>
-                    profissionais confiam
+                    <strong className="block text-white">Odontograma</strong>
+                    interativo por dente e face
                   </span>
                 </div>
                 <div className="flex items-center gap-3 sm:border-l sm:border-white/20 sm:pl-6">
                   <HeartPulse className="shrink-0 text-blue-300" size={30} />
                   <span>
-                    <strong className="block text-white">+1 milhão</strong>
-                    de atendimentos gerenciados
+                    <strong className="block text-white">Orçamentos</strong>
+                    gerados do plano de tratamento
                   </span>
                 </div>
                 <div className="flex items-center gap-3 sm:border-l sm:border-white/20 sm:pl-6">
                   <ShieldCheck className="shrink-0 text-blue-300" size={30} />
                   <span>
-                    <strong className="block text-white">Sistema 100%</strong>
-                    em nuvem, sempre com você
+                    <strong className="block text-white">WhatsApp</strong>
+                    para confirmar e lembrar pacientes
                   </span>
                 </div>
               </div>
@@ -337,23 +318,26 @@ export default function Cadastro() {
 
               <label className="block">
                 <span className="text-sm font-bold text-[#071b4d]">
-                  Profissão / especialidade
+                  Especialidade
                 </span>
                 <span className="mt-2 flex h-12 items-center gap-4 rounded-xl border border-slate-300 bg-white px-4 text-slate-400 shadow-sm shadow-slate-200/50 focus-within:border-blue-500">
                   <Stethoscope size={19} />
                   <select
-                    value={profissao}
-                    onChange={(event) => setProfissao(event.target.value)}
+                    value={especialidade}
+                    onChange={(event) => setEspecialidade(event.target.value)}
                     className="min-w-0 flex-1 appearance-none bg-transparent text-sm font-semibold text-slate-400 outline-none"
                   >
-                    <option value="">Selecione sua profissão ou especialidade</option>
-                    <option value="medicina">Medicina</option>
-                    <option value="odontologia">Odontologia</option>
-                    <option value="psicologia">Psicologia</option>
-                    <option value="fisioterapia">Fisioterapia</option>
-                    <option value="nutricao">Nutrição</option>
-                    <option value="fonoaudiologia">Fonoaudiologia</option>
-                    <option value="outra">Outra área da saúde</option>
+                    <option value="">Selecione sua especialidade</option>
+                    <option value="clinica-geral">Clínica geral</option>
+                    <option value="ortodontia">Ortodontia</option>
+                    <option value="implantodontia">Implantodontia</option>
+                    <option value="endodontia">Endodontia</option>
+                    <option value="periodontia">Periodontia</option>
+                    <option value="protese">Prótese dentária</option>
+                    <option value="odontopediatria">Odontopediatria</option>
+                    <option value="cirurgia">Cirurgia bucomaxilofacial</option>
+                    <option value="hof">Harmonização orofacial (HOF)</option>
+                    <option value="outra">Outra especialidade odontológica</option>
                   </select>
                   <ChevronDown size={19} />
                 </span>
@@ -475,7 +459,7 @@ export default function Cadastro() {
                   </span>
                   {cadastroCompleto ? (
                     <Link
-                      href="/dashboard?modo=teste&plano=starter&profissao=odontologia&dias=7"
+                      href="/dashboard?modo=teste&plano=starter&dias=7"
                       className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-700 to-teal-500 px-3 text-xs font-extrabold text-white shadow-lg shadow-blue-500/20 transition hover:brightness-110"
                     >
                       Começar teste grátis
@@ -510,29 +494,6 @@ export default function Cadastro() {
                 </div>
               </div>
             </section>
-
-            <div className="my-5 flex items-center gap-4 text-sm font-semibold text-slate-400">
-              <span className="h-px flex-1 bg-slate-200" />
-              ou continue com
-              <span className="h-px flex-1 bg-slate-200" />
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                className="flex h-[52px] w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-[#071b4d] shadow-sm transition hover:bg-slate-50"
-              >
-                <GoogleIcon />
-                Continuar com Google
-              </button>
-              <button
-                type="button"
-                className="flex h-[52px] w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-[#071b4d] shadow-sm transition hover:bg-slate-50"
-              >
-                <MicrosoftIcon />
-                Continuar com Microsoft
-              </button>
-            </div>
 
             <p className="mt-6 text-center text-sm font-semibold text-slate-500">
               Já tem uma conta?

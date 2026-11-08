@@ -1,6 +1,8 @@
 import { consultas } from "@/data/consultas";
 import { lancamentos } from "@/data/financeiro";
 import { pacientes as pacientesSeed } from "@/data/pacientes";
+import { hojeIso, dataIsoLocal } from "@/utils/datas";
+import { idDaReferencia, removerArquivo, removerArquivosDoPaciente } from "@/utils/arquivos";
 
 export type StoreId = string | number;
 
@@ -200,6 +202,11 @@ export type CliniplusLancamentoFinanceiro = {
   status: string;
   data: string;
   origem?: string;
+  formaPagamento?: string;
+  convenio?: string;
+  guia?: string;
+  autorizacao?: string;
+  observacoes?: string;
 };
 
 export type OrcamentoItem = {
@@ -250,6 +257,7 @@ export type CliniplusDocumento = {
   origem?: string;
   enviadoPor?: string;
   urlSimulada?: string;
+  arquivoId?: string;
   status?: string;
   criadoEm?: string;
   atualizadoEm?: string;
@@ -363,7 +371,6 @@ export type CliniplusPlanoTratamento = {
 export type SessaoPlano = {
   modo?: string;
   plano?: "starter" | "pro" | "premium" | string;
-  profissao?: string;
   demo?: string | boolean;
 };
 
@@ -382,6 +389,7 @@ const keys = {
   ohf: "cliniplus-ohf",
   planosTratamento: "cliniplus-planos-tratamento",
   orcamentos: "cliniplus-orcamentos",
+  hof: "cliniplus-hof",
   sessaoPlano: "cliniplus-sessao-plano",
 };
 
@@ -667,10 +675,63 @@ export function updatePaciente(id: StoreId, dados: Partial<CliniplusPaciente>) {
   writeList(keys.pacientes, pacientes);
 }
 
+const chavesVinculadasAoPaciente = [
+  keys.agenda,
+  keys.prontuarios,
+  keys.tratamentos,
+  keys.financeiro,
+  keys.documentos,
+  keys.procedimentos,
+  keys.exames,
+  keys.evolucoes,
+  keys.odontograma,
+  keys.ohf,
+  keys.planosTratamento,
+  keys.orcamentos,
+  keys.hof,
+];
+
 export function deletePaciente(id: StoreId) {
+  if (!hasWindow()) {
+    return;
+  }
+
+  const paciente = getPacienteById(id);
+  const ids = new Set(
+    [id, paciente?.id, paciente?.codigo, paciente?.pacienteId, paciente?.uuid]
+      .filter((valor) => valor !== undefined && valor !== null && valor !== "")
+      .map(String)
+  );
+  const pertenceAoPaciente = (item: { pacienteId?: StoreId }) =>
+    item.pacienteId !== undefined && ids.has(String(item.pacienteId));
+
+  chavesVinculadasAoPaciente.forEach((chave) => {
+    const lista = readValue<Array<{ pacienteId?: StoreId }>>(chave, []);
+    window.localStorage.setItem(
+      chave,
+      JSON.stringify(lista.filter((item) => !pertenceAoPaciente(item)))
+    );
+  });
+
+  const legado = readValue<CliniplusPaciente[]>(keys.pacientesLegacy, []);
+  window.localStorage.setItem(
+    keys.pacientesLegacy,
+    JSON.stringify(legado.filter((item) => !ids.has(String(item.id))))
+  );
+
+  ids.forEach((valor) => {
+    removerArquivosDoPaciente(valor).catch(() => undefined);
+    window.localStorage.removeItem(`cliniplus:patient-live:${valor}`);
+    window.localStorage.removeItem(`cliniplus:hof-live:${valor}`);
+  });
+
+  if (paciente?.nome) {
+    window.localStorage.removeItem(`cliniplus:hof-live:${paciente.nome}`);
+  }
+
   writeList(
     keys.pacientes,
-    getPacientes().filter((paciente) => !sameId(paciente.id, id))
+    getPacientes().filter((item) => !ids.has(String(item.id)))
   );
 }
 
@@ -718,11 +779,11 @@ export function addAgendamento(agendamento: Partial<CliniplusAgendamento>) {
     pacienteNome: paciente.nome,
     tipo: tipoAtendimento,
     tipoAtendimento,
-    data: agendamento.data || new Date().toISOString().slice(0, 10),
+    data: agendamento.data || hojeIso(),
     hora: horario,
     horario,
     duracao: agendamento.duracao || "45 min",
-    profissional: agendamento.profissional || "Dr. Rafael Oliveira",
+    profissional: agendamento.profissional || nomeExibicaoProfissional(),
     especialidade: agendamento.especialidade || "Clinica geral",
     unidade: agendamento.unidade || "Clinica principal",
     sala: agendamento.sala || "Consultorio 01",
@@ -838,7 +899,7 @@ export function addProcedimento(
     dente: procedimento.dente,
     faceRegiao: procedimento.faceRegiao,
     categoria: procedimento.categoria || "Outra",
-    profissional: procedimento.profissional || "Dr. Rafael Oliveira",
+    profissional: procedimento.profissional || nomeExibicaoProfissional(),
     status: procedimento.status || "planejado",
     duracao: procedimento.duracao,
     valor: procedimento.valor,
@@ -915,7 +976,7 @@ export function addExame(
     dente: exame.dente,
     regiao: exame.regiao,
     categoria: exame.categoria || "Outro",
-    profissional: exame.profissional || "Dr. Rafael Oliveira",
+    profissional: exame.profissional || nomeExibicaoProfissional(),
     status: exame.status || "solicitado",
     origem: exame.origem || "clinica",
     arquivoNome: exame.arquivoNome,
@@ -961,6 +1022,11 @@ export function updateExame(
 }
 
 export function deleteExame(id: StoreId) {
+  const arquivoId = idDaReferencia(getExames().find((exame) => sameId(exame.id, id))?.arquivoUrl);
+  if (arquivoId) {
+    removerArquivo(arquivoId).catch(() => undefined);
+  }
+
   writeList(
     keys.exames,
     getExames().filter((exame) => !sameId(exame.id, id))
@@ -1034,7 +1100,7 @@ export function addPlanoTratamento(
     pacienteId: plano.pacienteId ?? "",
     titulo: plano.titulo || "Plano de tratamento odontologico",
     status: plano.status || "rascunho",
-    profissional: plano.profissional || "Dr. Rafael Oliveira",
+    profissional: plano.profissional || nomeExibicaoProfissional(),
     dataCriacao: plano.dataCriacao || agora.slice(0, 10),
     previsaoInicio: plano.previsaoInicio || "",
     previsaoFim: plano.previsaoFim || "",
@@ -1162,6 +1228,11 @@ export function addLancamentoFinanceiro(
     status: lancamento.status || "Pendente",
     data: lancamento.data || "",
     origem: lancamento.origem || paciente?.convenio || "Clinica",
+    formaPagamento: lancamento.formaPagamento,
+    convenio: lancamento.convenio,
+    guia: lancamento.guia,
+    autorizacao: lancamento.autorizacao,
+    observacoes: lancamento.observacoes,
   };
 
   writeList(keys.financeiro, [...getLancamentosFinanceiros(), novoLancamento]);
@@ -1200,8 +1271,11 @@ export function getDocumentos() {
 export function addDocumento(documento: Partial<CliniplusDocumento>) {
   const paciente = documento.pacienteId ? getPacienteById(documento.pacienteId) : null;
   const agora = new Date().toISOString();
-  const dataEnvio = documento.dataEnvio || documento.data || agora.slice(0, 10);
-  const horaEnvio = documento.horaEnvio || agora.slice(11, 16);
+  const momento = new Date();
+  const dataEnvio = documento.dataEnvio || documento.data || dataIsoLocal(momento);
+  const horaEnvio =
+    documento.horaEnvio ||
+    `${String(momento.getHours()).padStart(2, "0")}:${String(momento.getMinutes()).padStart(2, "0")}`;
   const extensao = documento.extensao || documento.formato || "";
   const novoDocumento: CliniplusDocumento = {
     id: documento.id ?? createId(),
@@ -1221,6 +1295,7 @@ export function addDocumento(documento: Partial<CliniplusDocumento>) {
     origem: documento.origem || "Paciente",
     enviadoPor: documento.enviadoPor || documento.paciente || paciente?.nome || "Clini+",
     urlSimulada: documento.urlSimulada,
+    arquivoId: documento.arquivoId,
     status: documento.status || "ativo",
     criadoEm: documento.criadoEm || agora,
     atualizadoEm: documento.atualizadoEm,
@@ -1265,6 +1340,13 @@ export function updateDocumento(
 }
 
 export function deleteDocumento(id: StoreId) {
+  const documentoRemovido = getDocumentos().find((documento) => sameId(documento.id, id));
+  const arquivoId =
+    documentoRemovido?.arquivoId || idDaReferencia(documentoRemovido?.urlSimulada);
+  if (arquivoId) {
+    removerArquivo(arquivoId).catch(() => undefined);
+  }
+
   writeList(
     keys.documentos,
     getDocumentos().filter((documento) => !sameId(documento.id, id))
@@ -1296,14 +1378,14 @@ export function addEvolucao(evolucao: Partial<CliniplusEvolucao>) {
   const novaEvolucao: CliniplusEvolucao = {
     id: evolucao.id ?? createId(),
     pacienteId: evolucao.pacienteId ?? "",
-    data: evolucao.data || new Date().toISOString().slice(0, 10),
+    data: evolucao.data || hojeIso(),
     hora:
       evolucao.hora ||
       new Date().toLocaleTimeString("pt-BR", {
         hour: "2-digit",
         minute: "2-digit",
       }),
-    profissional: evolucao.profissional || "Dr. Rafael Oliveira",
+    profissional: evolucao.profissional || nomeExibicaoProfissional(),
     tipo: evolucao.tipo || "Consulta",
     area: evolucao.area || "Odontologia",
     dentes: evolucao.dentes || "",
@@ -1363,8 +1445,8 @@ export function addOdontogramaAnotacao(
     condicao: anotacao.condicao || "Hígido",
     status: anotacao.status || "Observação",
     observacao: anotacao.observacao || "",
-    profissional: anotacao.profissional || "Dr. Rafael Oliveira",
-    data: anotacao.data || new Date().toISOString().slice(0, 10),
+    profissional: anotacao.profissional || nomeExibicaoProfissional(),
+    data: anotacao.data || hojeIso(),
     criadoEm: anotacao.criadoEm || new Date().toISOString(),
     atualizadoEm: anotacao.atualizadoEm,
   };
@@ -1418,14 +1500,14 @@ export function addOHFAvaliacao(avaliacao: Partial<CliniplusOHFAvaliacao>) {
   const novaAvaliacao: CliniplusOHFAvaliacao = {
     id: avaliacao.id ?? createId(),
     pacienteId: avaliacao.pacienteId ?? "",
-    data: avaliacao.data || agora.toISOString().slice(0, 10),
+    data: avaliacao.data || dataIsoLocal(agora),
     hora:
       avaliacao.hora ||
       agora.toLocaleTimeString("pt-BR", {
         hour: "2-digit",
         minute: "2-digit",
       }),
-    profissional: avaliacao.profissional || "Dr. Rafael Oliveira",
+    profissional: avaliacao.profissional || nomeExibicaoProfissional(),
     doencasSistemicas: avaliacao.doencasSistemicas || "",
     alergias: avaliacao.alergias || "",
     medicamentosUso: avaliacao.medicamentosUso || "",
@@ -1793,4 +1875,151 @@ export function setSessaoPlano(sessao: SessaoPlano) {
 
   window.localStorage.setItem(keys.sessaoPlano, JSON.stringify(sessao));
   emitStoreChange();
+}
+
+export type PerfilUsuario = {
+  nome: string;
+  tratamento: string;
+  email: string;
+  telefone: string;
+  cro: string;
+  especialidade: string;
+};
+
+const perfilKey = "cliniplus-perfil";
+
+export const perfilPadrao: PerfilUsuario = {
+  nome: "Rafael Oliveira",
+  tratamento: "Dr.",
+  email: "rafael@cliniplus.demo",
+  telefone: "(85) 99999-0000",
+  cro: "CRO-CE 12345",
+  especialidade: "Clinica geral",
+};
+
+export function getPerfil(): PerfilUsuario {
+  return { ...perfilPadrao, ...readValue<Partial<PerfilUsuario>>(perfilKey, {}) };
+}
+
+export function savePerfil(perfil: PerfilUsuario) {
+  if (!hasWindow()) {
+    return;
+  }
+
+  window.localStorage.setItem(perfilKey, JSON.stringify(perfil));
+  emitStoreChange();
+}
+
+export function nomeExibicaoProfissional(perfil: PerfilUsuario = getPerfil()) {
+  return [perfil.tratamento, perfil.nome].filter(Boolean).join(" ");
+}
+
+export type StatusProcedimentoHof = "Planejado" | "Realizado" | "Retorno" | "Cancelado";
+
+export type CliniplusProcedimentoHof = {
+  id: StoreId;
+  pacienteId: StoreId;
+  data: string;
+  procedimento: string;
+  regiao: string;
+  produto: string;
+  lote: string;
+  validade: string;
+  quantidade: string;
+  valor: string;
+  status: StatusProcedimentoHof;
+  retorno: string;
+  observacoes: string;
+  profissional: string;
+  criadoEm: string;
+};
+
+export function getProcedimentosHof(pacienteId?: StoreId) {
+  const lista = readList<CliniplusProcedimentoHof>(keys.hof, []);
+  return pacienteId === undefined ? lista : lista.filter((item) => sameId(item.pacienteId, pacienteId));
+}
+
+export function addProcedimentoHof(dados: Partial<CliniplusProcedimentoHof> & { pacienteId: StoreId }) {
+  const novo: CliniplusProcedimentoHof = {
+    id: createId(),
+    pacienteId: dados.pacienteId,
+    data: dados.data || hojeIso(),
+    procedimento: dados.procedimento || "Procedimento HOF",
+    regiao: dados.regiao || "",
+    produto: dados.produto || "",
+    lote: dados.lote || "",
+    validade: dados.validade || "",
+    quantidade: dados.quantidade || "",
+    valor: dados.valor || "",
+    status: dados.status || "Planejado",
+    retorno: dados.retorno || "",
+    observacoes: dados.observacoes || "",
+    profissional: dados.profissional || nomeExibicaoProfissional(),
+    criadoEm: new Date().toISOString(),
+  };
+  writeList(keys.hof, [...readList<CliniplusProcedimentoHof>(keys.hof, []), novo]);
+  return novo;
+}
+
+export function updateProcedimentoHof(id: StoreId, dados: Partial<CliniplusProcedimentoHof>) {
+  writeList(
+    keys.hof,
+    readList<CliniplusProcedimentoHof>(keys.hof, []).map((item) => (sameId(item.id, id) ? { ...item, ...dados } : item))
+  );
+}
+
+export function deleteProcedimentoHof(id: StoreId) {
+  writeList(
+    keys.hof,
+    readList<CliniplusProcedimentoHof>(keys.hof, []).filter((item) => !sameId(item.id, id))
+  );
+}
+
+export type ConfigClinica = {
+  nomeClinica: string;
+  documento: string;
+  telefone: string;
+  email: string;
+  endereco: string;
+  areaAtuacao: string;
+  horaAbertura: string;
+  horaFechamento: string;
+  duracaoConsulta: string;
+};
+
+const configClinicaKey = "configuracoes-cliniplus";
+
+export const configClinicaPadrao: ConfigClinica = {
+  nomeClinica: "Clini+ Odontologia",
+  documento: "",
+  telefone: "",
+  email: "",
+  endereco: "",
+  areaAtuacao: "Odontologia e HOF",
+  horaAbertura: "07:00",
+  horaFechamento: "19:00",
+  duracaoConsulta: "30 min",
+};
+
+export function getConfigClinica(): ConfigClinica {
+  return { ...configClinicaPadrao, ...readValue<Partial<ConfigClinica>>(configClinicaKey, {}) };
+}
+
+export function saveConfigClinica(config: ConfigClinica) {
+  if (!hasWindow()) {
+    return;
+  }
+
+  window.localStorage.setItem(configClinicaKey, JSON.stringify(config));
+  emitStoreChange();
+}
+
+export function horariosDeAtendimento(config: ConfigClinica = getConfigClinica()) {
+  const inicio = Number(config.horaAbertura.slice(0, 2)) || 7;
+  const fim = Number(config.horaFechamento.slice(0, 2)) || 19;
+  const horas: string[] = [];
+  for (let hora = inicio; hora <= Math.max(inicio, fim); hora += 1) {
+    horas.push(`${String(hora).padStart(2, "0")}:00`);
+  }
+  return horas;
 }

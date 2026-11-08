@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import PatientDeleteButton from "@/components/PatientDeleteButton";
 import {
   CalendarDays,
   Check,
@@ -22,11 +23,22 @@ import {
 } from "lucide-react";
 import {
   getAgendamentosByPacienteId,
+  addDocumento,
+  deleteDocumento,
   getDocumentosByPacienteId,
   getTratamentosByPacienteId,
   updatePaciente,
   type CliniplusPaciente,
 } from "@/utils/cliniplusStore";
+import {
+  TIPOS_ACEITOS,
+  abrirArquivo,
+  baixarArquivo,
+  extensaoDoArquivo,
+  formatarTamanho,
+  salvarArquivo,
+  validarArquivo,
+} from "@/utils/arquivos";
 
 type PacienteCadastroFichaProps = {
   paciente: CliniplusPaciente;
@@ -268,14 +280,43 @@ export default function PacienteCadastroFicha({
     }));
   }
 
-  function alternarDocumento(documento: string) {
-    setForm((atual) => ({
-      ...atual,
-      documentosChecklist: atual.documentosChecklist.includes(documento)
-        ? atual.documentosChecklist.filter((item) => item !== documento)
-        : [...atual.documentosChecklist, documento],
-    }));
-    setMensagem("Documento marcado como metadado do cadastro.");
+  async function enviarDocumento(documento: string, arquivo: File | undefined) {
+    if (!arquivo) return;
+    const problema = validarArquivo(arquivo);
+    if (problema) {
+      setMensagem(`${documento}: ${problema}`);
+      return;
+    }
+
+    try {
+      const salvo = await salvarArquivo(arquivo, paciente.id);
+      documentosSalvos
+        .filter((item) => item.nome === documento)
+        .forEach((item) => deleteDocumento(item.id));
+      addDocumento({
+        pacienteId: paciente.id,
+        paciente: paciente.nome,
+        nome: documento,
+        categoria: "Cadastro",
+        tipo: "Cadastro",
+        origem: "Ficha do paciente",
+        status: "Anexado",
+        arquivoId: salvo.id,
+        formato: extensaoDoArquivo(arquivo.name),
+        extensao: extensaoDoArquivo(arquivo.name),
+        tamanho: formatarTamanho(arquivo.size),
+        observacao: arquivo.name,
+      });
+      setForm((atual) => ({
+        ...atual,
+        documentosChecklist: atual.documentosChecklist.includes(documento)
+          ? atual.documentosChecklist
+          : [...atual.documentosChecklist, documento],
+      }));
+      setMensagem(`${documento} enviado.`);
+    } catch {
+      setMensagem("Não foi possível guardar o arquivo neste navegador.");
+    }
   }
 
   function rolarPara(id: string) {
@@ -340,7 +381,7 @@ export default function PacienteCadastroFicha({
       portalPaciente: form.portalPaciente,
       documentosChecklist: form.documentosChecklist,
       observacoesInternas: form.observacoesInternas,
-      area: form.profissao || paciente.area,
+      area: paciente.area,
     });
     setMensagem("Paciente atualizado com sucesso.");
   }
@@ -373,6 +414,7 @@ export default function PacienteCadastroFicha({
             <FileText size={17} />
             Abrir prontuario
           </Link>
+          <PatientDeleteButton pacienteId={paciente.id} nome={paciente.nome} compact />
           <button
             type="button"
             onClick={salvar}
@@ -399,7 +441,7 @@ export default function PacienteCadastroFicha({
                   {paciente.status || "Ativo"}
                 </span>
                 <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-black text-indigo-700">
-                  {form.profissao || paciente.area || "Cadastro"}
+                  {paciente.tipoAtendimento === "estetica" ? "HOF" : "Odontologia"}
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-600">
@@ -512,7 +554,7 @@ export default function PacienteCadastroFicha({
                 <Input label="Complemento" value={form.complemento} onChange={(v) => atualizar("complemento", v)} />
                 <Input label="Bairro" value={form.bairro} onChange={(v) => atualizar("bairro", v)} />
                 <Input label="Cidade" value={form.cidade} onChange={(v) => atualizar("cidade", v)} />
-                <Select label="UF" value={form.uf} onChange={(v) => atualizar("uf", v)} options={["", "AC", "AL", "AM", "BA", "CE", "DF", "ES", "GO", "MG", "PE", "PR", "RJ", "RS", "SC", "SP"]} />
+                <Select label="UF" value={form.uf} onChange={(v) => atualizar("uf", v)} options={["", "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"]} />
               </div>
             </Section>
 
@@ -530,7 +572,7 @@ export default function PacienteCadastroFicha({
             <div className="grid gap-6 xl:grid-cols-2">
               <Section id="convenio" title="4. Convenio" icon={ShieldCheck}>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Select label="Convenio" value={form.convenio} onChange={(v) => atualizar("convenio", v)} options={["", "Particular", "Amil", "Unimed", "Bradesco Saude", "SulAmerica", "Hapvida", "Outro"]} />
+                  <Select label="Convenio" value={form.convenio} onChange={(v) => atualizar("convenio", v)} options={["", "Particular", "Amil Dental", "Bradesco Dental", "OdontoPrev", "SulAmerica Odonto", "Hapvida Odonto", "Uniodonto", "Outro"]} />
                   <Input label="Plano" value={form.planoConvenio} onChange={(v) => atualizar("planoConvenio", v)} />
                   <Input label="Numero da carteirinha" value={form.numeroCarteirinha} onChange={(v) => atualizar("numeroCarteirinha", v)} />
                   <Input label="Validade" type="month" value={form.validadeCarteirinha} onChange={(v) => atualizar("validadeCarteirinha", v)} />
@@ -558,28 +600,48 @@ export default function PacienteCadastroFicha({
 
               <div className="mt-5 grid gap-3 md:grid-cols-5">
                 {documentosPadrao.map((documento) => {
-                  const anexado =
-                    form.documentosChecklist.includes(documento) ||
-                    documentosSalvos.some((item) => item.nome === documento);
+                  const salvo = documentosSalvos.find((item) => item.nome === documento && item.arquivoId);
                   return (
-                    <button
+                    <div
                       key={documento}
-                      type="button"
-                      onClick={() => alternarDocumento(documento)}
                       className={`rounded-lg border border-dashed p-4 text-left transition ${
-                        anexado
+                        salvo
                           ? "border-emerald-300 bg-emerald-50"
                           : "border-slate-200 bg-white hover:border-indigo-300"
                       }`}
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-                        {anexado ? <Check size={17} /> : <Upload size={17} />}
-                      </span>
-                      <strong className="mt-3 block text-sm">{documento}</strong>
-                      <span className="mt-1 block text-xs font-semibold text-indigo-700">
-                        {anexado ? "Registrado" : "Marcar como recebido"}
-                      </span>
-                    </button>
+                      <label className="block cursor-pointer">
+                        <input
+                          type="file"
+                          accept={TIPOS_ACEITOS}
+                          className="sr-only"
+                          onChange={(event) => {
+                            enviarDocumento(documento, event.target.files?.[0]);
+                            event.target.value = "";
+                          }}
+                        />
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
+                          {salvo ? <Check size={17} /> : <Upload size={17} />}
+                        </span>
+                        <strong className="mt-3 block text-sm">{documento}</strong>
+                        <span className="mt-1 block truncate text-xs font-semibold text-indigo-700">
+                          {salvo ? salvo.observacao || "Arquivo anexado" : "Enviar arquivo"}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {salvo ? `${salvo.tamanho} - clique para trocar` : "PDF, JPG ou PNG até 15 MB"}
+                        </span>
+                      </label>
+                      {salvo?.arquivoId && (
+                        <div className="mt-2 flex gap-3 text-xs font-bold">
+                          <button type="button" onClick={() => abrirArquivo(salvo.arquivoId!)} className="text-indigo-700">
+                            Abrir
+                          </button>
+                          <button type="button" onClick={() => baixarArquivo(salvo.arquivoId!)} className="text-indigo-700">
+                            Baixar
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

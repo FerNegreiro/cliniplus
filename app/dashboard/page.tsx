@@ -1,27 +1,12 @@
 "use client";
 
-import Sidebar from "@/components/Sidebar";
-import {
-  type CliniplusAgendamento,
-  type CliniplusLancamentoFinanceiro,
-  type CliniplusPaciente,
-  type SessaoPlano,
-  type CliniplusTratamento,
-  getAgendamentos,
-  getLancamentosFinanceiros,
-  getPacientes,
-  getSessaoPlano,
-  getTratamentos,
-  setSessaoPlano,
-} from "@/utils/cliniplusStore";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   BarChart3,
   Bell,
   CalendarDays,
-  ChevronRight,
   ClipboardList,
   DollarSign,
   FileText,
@@ -30,27 +15,45 @@ import {
   MessageCircle,
   Plus,
   Search,
-  Star,
-  Stethoscope,
   Users,
+  Wallet,
+  type LucideIcon,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import Sidebar from "@/components/Sidebar";
+import {
+  getAgendamentos,
+  getLancamentosFinanceiros,
+  getOrcamentos,
+  getPacientes,
+  getPerfil,
+  getSessaoPlano,
+  getTratamentos,
+  perfilPadrao,
+  setSessaoPlano,
+  type CliniplusAgendamento,
+  type CliniplusLancamentoFinanceiro,
+  type CliniplusOrcamento,
+  type CliniplusPaciente,
+  type CliniplusTratamento,
+  type PerfilUsuario,
+  type SessaoPlano,
+} from "@/utils/cliniplusStore";
+import { classeStatus, labelStatus, normalizarStatus } from "@/utils/agendaStatus";
+import { dataIsoLocal, formatarDataBr, hojeIso, somarDias } from "@/utils/datas";
+import { dinheiroParaNumero, formatarMoeda, normalizarTexto } from "@/utils/format";
 
 type PlanoSlug = "starter" | "pro" | "premium";
-type ProfissaoSlug =
-  | "odontologia"
-  | "medicina"
-  | "psicologia"
-  | "fisioterapia"
-  | "nutricao"
-  | "outros";
+type PeriodoFinanceiro = "mes" | "mes-passado" | "ano";
 
 type DashboardData = {
   pacientes: CliniplusPaciente[];
   agendamentos: CliniplusAgendamento[];
   tratamentos: CliniplusTratamento[];
   financeiro: CliniplusLancamentoFinanceiro[];
+  orcamentos: CliniplusOrcamento[];
 };
+
+type Alerta = { id: string; titulo: string; detalhe: string; href: string };
 
 const nomesPlanos: Record<PlanoSlug, string> = {
   starter: "Plano Starter",
@@ -58,104 +61,51 @@ const nomesPlanos: Record<PlanoSlug, string> = {
   premium: "Plano Premium",
 };
 
-const nomeArea: Record<ProfissaoSlug, string> = {
-  odontologia: "Odontologia",
-  medicina: "Medicina",
-  psicologia: "Psicologia",
-  fisioterapia: "Fisioterapia",
-  nutricao: "Nutricao",
-  outros: "Saude",
-};
+const periodosFinanceiros: Array<{ valor: PeriodoFinanceiro; rotulo: string }> = [
+  { valor: "mes", rotulo: "Este mes" },
+  { valor: "mes-passado", rotulo: "Mes passado" },
+  { valor: "ano", rotulo: "Este ano" },
+];
 
-const emptyDashboardData: DashboardData = {
+const nomesMeses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const coresTipos = ["#6366f1", "#10b981", "#f43f5e", "#fb923c", "#0ea5e9"];
+
+const dadosVazios: DashboardData = {
   pacientes: [],
   agendamentos: [],
   tratamentos: [],
   financeiro: [],
+  orcamentos: [],
 };
 
-function normalizarPlano(valor: string | null | undefined): PlanoSlug | "" {
-  if (valor === "pro" || valor === "premium" || valor === "starter") {
-    return valor;
-  }
-
-  return "";
+function normalizarPlano(valor: string | null | undefined): PlanoSlug {
+  return valor === "pro" || valor === "premium" ? valor : "starter";
 }
 
-function normalizarProfissao(valor: string | null | undefined): ProfissaoSlug {
-  if (
-    valor === "odontologia" ||
-    valor === "medicina" ||
-    valor === "psicologia" ||
-    valor === "fisioterapia" ||
-    valor === "nutricao" ||
-    valor === "outros"
-  ) {
-    return valor;
-  }
-
-  return "outros";
+function lancamentoPago(item: CliniplusLancamentoFinanceiro) {
+  return ["pago", "recebido do convenio"].includes(normalizarTexto(item.status));
 }
 
-function dinheiroParaNumero(valor: string | undefined) {
-  if (!valor) {
-    return 0;
+function intervaloFinanceiro(periodo: PeriodoFinanceiro) {
+  const hoje = new Date();
+  if (periodo === "mes-passado") {
+    const inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    return { inicio: dataIsoLocal(inicio), fim: dataIsoLocal(fim) };
   }
-
-  const limpo = valor
-    .replace(/[^\d,.-]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-
-  return Number(limpo) || 0;
+  if (periodo === "ano") {
+    return { inicio: `${hoje.getFullYear()}-01-01`, fim: `${hoje.getFullYear()}-12-31` };
+  }
+  const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  return { inicio: dataIsoLocal(inicio), fim: dataIsoLocal(fim) };
 }
 
-function formatMoney(valor: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(valor);
+function getHorario(item: CliniplusAgendamento) {
+  return item.horario || item.hora || "";
 }
 
-function getStatusClass(status: string) {
-  const normalizado = status.toLowerCase();
-
-  if (
-    normalizado === "confirmado" ||
-    normalizado === "pago" ||
-    normalizado === "recebido"
-  ) {
-    return "bg-emerald-50 text-emerald-700";
-  }
-
-  if (normalizado === "em andamento" || normalizado === "em_atendimento") {
-    return "bg-orange-50 text-orange-700";
-  }
-
-  if (
-    normalizado === "pendente" ||
-    normalizado === "aguardando" ||
-    normalizado === "rascunho"
-  ) {
-    return "bg-amber-50 text-amber-700";
-  }
-
-  return "bg-slate-100 text-slate-700";
-}
-
-function MetricCard({
-  title,
-  value,
-  detail,
-  icon: Icon,
-  tone,
-}: {
-  title: string;
-  value: string;
-  detail: string;
-  icon: LucideIcon;
-  tone: string;
-}) {
+function MetricCard({ title, value, detail, icon: Icon, tone }: { title: string; value: string; detail: string; icon: LucideIcon; tone: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -164,9 +114,7 @@ function MetricCard({
           <h3 className="mt-3 text-3xl font-black text-slate-950">{value}</h3>
           <p className="mt-2 text-sm font-semibold text-slate-500">{detail}</p>
         </div>
-        <span
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg text-white shadow-sm ${tone}`}
-        >
+        <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg text-white shadow-sm ${tone}`}>
           <Icon size={26} />
         </span>
       </div>
@@ -174,15 +122,7 @@ function MetricCard({
   );
 }
 
-function QuickAction({
-  href,
-  label,
-  icon: Icon,
-}: {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-}) {
+function QuickAction({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
   return (
     <Link
       href={href}
@@ -190,6 +130,31 @@ function QuickAction({
     >
       <Icon size={25} />
       <span>{label}</span>
+    </Link>
+  );
+}
+
+function ItemAgenda({ item, mostrarData }: { item: CliniplusAgendamento; mostrarData?: boolean }) {
+  return (
+    <Link
+      href={`/agenda?data=${item.data}&visualizacao=dia`}
+      className="grid gap-3 rounded-lg bg-slate-50 p-3 transition hover:bg-indigo-50 sm:grid-cols-[76px_1fr_auto] sm:items-center"
+    >
+      <div className="rounded-lg bg-white px-3 py-2 text-center shadow-sm">
+        <p className="font-black text-slate-950">{getHorario(item) || "--:--"}</p>
+        <p className="text-xs font-semibold text-slate-500">
+          {mostrarData ? formatarDataBr(item.data).slice(0, 5) : item.duracao || "45 min"}
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p className="truncate font-extrabold">{item.pacienteNome || item.paciente}</p>
+        <p className="truncate text-sm font-medium text-slate-500">
+          {item.procedimento || item.tipoAtendimento || item.tipo}
+        </p>
+      </div>
+      <span className={`w-fit rounded-lg px-3 py-1 text-xs font-extrabold ${classeStatus(item.status)}`}>
+        {labelStatus(item.status)}
+      </span>
     </Link>
   );
 }
@@ -209,95 +174,218 @@ export default function Dashboard() {
 }
 
 function DashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const queryModo = searchParams.get("modo");
   const queryPlano = searchParams.get("plano");
-  const queryProfissao = searchParams.get("profissao");
-  const [sessaoSalva, setSessaoSalva] = useState<SessaoPlano | null>(null);
-  const modo = queryModo || sessaoSalva?.modo || "demo";
-  const planoParam = queryPlano || sessaoSalva?.plano || "starter";
-  const plano = normalizarPlano(planoParam) || "starter";
-  const profissao = normalizarProfissao(queryProfissao || sessaoSalva?.profissao);
+  const [sessao, setSessao] = useState<SessaoPlano | null>(null);
+  const [perfil, setPerfil] = useState<PerfilUsuario>(perfilPadrao);
+  const [dados, setDados] = useState<DashboardData>(dadosVazios);
+  const [periodo, setPeriodo] = useState<PeriodoFinanceiro>("mes");
+  const [busca, setBusca] = useState("");
+  const [alertasAbertos, setAlertasAbertos] = useState(false);
+  const painelAlertas = useRef<HTMLDivElement>(null);
+
+  const modo = queryModo || sessao?.modo || "assinatura";
+  const plano = normalizarPlano(queryPlano || sessao?.plano);
   const dias = searchParams.get("dias") || "7";
-  const emTeste = modo === "teste";
-  const semSessaoOriginal = !queryModo && !queryPlano && !sessaoSalva?.modo;
-  const [dados, setDados] = useState<DashboardData>(emptyDashboardData);
+  const queryDemo = searchParams.get("demo");
 
   useEffect(() => {
-    if (queryModo || queryPlano || queryProfissao) {
+    if (queryModo || queryPlano) {
       const sessaoAtual = {
         modo: queryModo || undefined,
         plano: queryPlano || undefined,
-        profissao: queryProfissao || undefined,
-        demo: searchParams.get("demo") || undefined,
+        demo: queryDemo || undefined,
       };
-
       setSessaoPlano(sessaoAtual);
-      setSessaoSalva(sessaoAtual);
+      setSessao(sessaoAtual);
       return;
     }
-
-    setSessaoSalva(getSessaoPlano() ?? null);
-  }, [queryModo, queryPlano, queryProfissao, searchParams]);
+    setSessao(getSessaoPlano() ?? null);
+  }, [queryDemo, queryModo, queryPlano]);
 
   useEffect(() => {
-    function carregarDados() {
+    function carregar() {
+      setPerfil(getPerfil());
       setDados({
         pacientes: getPacientes(),
         agendamentos: getAgendamentos(),
         tratamentos: getTratamentos(),
         financeiro: getLancamentosFinanceiros(),
+        orcamentos: getOrcamentos(),
       });
     }
 
-    carregarDados();
-    window.addEventListener("cliniplus:store", carregarDados);
-    return () => window.removeEventListener("cliniplus:store", carregarDados);
+    carregar();
+    window.addEventListener("cliniplus:store", carregar);
+    return () => window.removeEventListener("cliniplus:store", carregar);
   }, []);
 
-  const areaAtual = nomeArea[profissao];
-  const badgePlano = emTeste
-    ? `${nomesPlanos.starter} - ${dias} dias restantes`
-    : `${nomesPlanos[plano]} ativo`;
+  useEffect(() => {
+    function fecharAoClicarFora(event: MouseEvent) {
+      if (painelAlertas.current && !painelAlertas.current.contains(event.target as Node)) {
+        setAlertasAbertos(false);
+      }
+    }
+    document.addEventListener("mousedown", fecharAoClicarFora);
+    return () => document.removeEventListener("mousedown", fecharAoClicarFora);
+  }, []);
 
-  const hojeIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const atendimentosHoje = dados.agendamentos.filter(
-    (item) => !item.data || item.data === hojeIso
-  );
-  const listaAgenda = (atendimentosHoje.length > 0
-    ? atendimentosHoje
-    : dados.agendamentos
-  ).slice(0, 5);
+  const hoje = hojeIso();
+  const amanha = somarDias(hoje, 1);
+
+  const agenda = useMemo(() => {
+    const ordenar = (lista: CliniplusAgendamento[]) =>
+      [...lista].sort((a, b) => `${a.data}${getHorario(a)}`.localeCompare(`${b.data}${getHorario(b)}`));
+    const validos = dados.agendamentos.filter((item) => normalizarStatus(item.status) !== "bloqueio");
+    const doDia = ordenar(validos.filter((item) => item.data === hoje));
+    const ativosHoje = doDia.filter((item) => normalizarStatus(item.status) !== "cancelado");
+    const atendidos = ativosHoje.filter((item) => normalizarStatus(item.status) === "concluido").length;
+    const proximos = ordenar(
+      validos.filter((item) => item.data > hoje && normalizarStatus(item.status) !== "cancelado")
+    ).slice(0, 5);
+    return { doDia, ativosHoje, atendidos, proximos };
+  }, [dados.agendamentos, hoje]);
+
+  const financeiro = useMemo(() => {
+    const { inicio, fim } = intervaloFinanceiro(periodo);
+    const noPeriodo = dados.financeiro.filter((item) => item.data >= inicio && item.data <= fim);
+    const somar = (lista: CliniplusLancamentoFinanceiro[]) =>
+      lista.reduce((total, item) => total + dinheiroParaNumero(item.valor), 0);
+    const receitas = noPeriodo.filter((item) => item.tipo === "Receita");
+    const despesas = noPeriodo.filter((item) => item.tipo === "Despesa");
+    const recebido = somar(receitas.filter(lancamentoPago));
+    const pago = somar(despesas.filter(lancamentoPago));
+
+    const base = new Date();
+    const meses = Array.from({ length: 6 }, (_, indice) => {
+      const data = new Date(base.getFullYear(), base.getMonth() - (5 - indice), 1);
+      const prefixo = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+      const doMes = dados.financeiro.filter((item) => (item.data || "").startsWith(prefixo) && lancamentoPago(item));
+      return {
+        rotulo: nomesMeses[data.getMonth()],
+        receitas: somar(doMes.filter((item) => item.tipo === "Receita")),
+        despesas: somar(doMes.filter((item) => item.tipo === "Despesa")),
+      };
+    });
+
+    return {
+      recebido,
+      pago,
+      aReceber: somar(receitas.filter((item) => !lancamentoPago(item) && normalizarTexto(item.status) !== "glosado")),
+      saldo: recebido - pago,
+      quantidadeReceitas: receitas.length,
+      meses,
+      maiorMes: Math.max(...meses.map((mes) => Math.max(mes.receitas, mes.despesas)), 0),
+    };
+  }, [dados.financeiro, periodo]);
+
+  const receitaDoMes = useMemo(() => {
+    const { inicio, fim } = intervaloFinanceiro("mes");
+    const receitas = dados.financeiro.filter(
+      (item) => item.tipo === "Receita" && item.data >= inicio && item.data <= fim
+    );
+    return {
+      valor: receitas.filter(lancamentoPago).reduce((total, item) => total + dinheiroParaNumero(item.valor), 0),
+      quantidade: receitas.length,
+    };
+  }, [dados.financeiro]);
+
+  const tratamentos = useMemo(() => {
+    const status = (item: CliniplusTratamento) => normalizarTexto(item.status);
+    return {
+      emAndamento: dados.tratamentos.filter((item) => ["em andamento", "urgente"].includes(status(item))).length,
+      planejados: dados.tratamentos.filter((item) => status(item) === "planejado").length,
+    };
+  }, [dados.tratamentos]);
+
   const pacientesAtivos = dados.pacientes.filter((paciente) =>
-    ["Ativo", "Em tratamento", "Retorno pendente"].includes(paciente.status)
+    ["ativo", "em tratamento", "retorno pendente", "em acompanhamento"].includes(normalizarTexto(paciente.status))
   ).length;
-  const receitas = dados.financeiro.filter((item) => item.tipo === "Receita");
-  const despesas = dados.financeiro.filter((item) => item.tipo === "Despesa");
-  const totalReceitas = receitas.reduce(
-    (total, item) => total + dinheiroParaNumero(item.valor),
-    0
-  );
-  const totalDespesas = despesas.reduce(
-    (total, item) => total + dinheiroParaNumero(item.valor),
-    0
-  );
-  const lucroLiquido = totalReceitas - totalDespesas;
-  const tratamentosEmAndamento = dados.tratamentos.filter((tratamento) =>
-    ["Em andamento", "Planejado", "Urgente"].includes(tratamento.status)
-  ).length;
-  const realizadosHoje = atendimentosHoje.filter(
-    (item) => item.status === "Concluido" || item.status === "Realizado"
-  ).length;
-  const restantesHoje = Math.max(atendimentosHoje.length - realizadosHoje, 0);
 
-  const tiposAtendimento = [
-    { label: "Consultas", value: dados.agendamentos.length, color: "bg-indigo-500" },
-    { label: "Retornos", value: dados.agendamentos.filter((item) => (item.tipoAtendimento || item.tipo) === "Retorno").length, color: "bg-emerald-500" },
-    { label: "Procedimentos", value: dados.tratamentos.length, color: "bg-rose-500" },
-    { label: areaAtual, value: dados.pacientes.filter((item) => item.tipoAtendimento === "odontologia").length, color: "bg-orange-400" },
-  ].filter((item) => item.value > 0);
-  const totalTipos =
-    tiposAtendimento.reduce((total, item) => total + item.value, 0) || 1;
+  const tiposAtendimento = useMemo(() => {
+    const prefixo = hoje.slice(0, 7);
+    const contagem = new Map<string, number>();
+    dados.agendamentos
+      .filter((item) => (item.data || "").startsWith(prefixo) && !["cancelado", "bloqueio"].includes(normalizarStatus(item.status)))
+      .forEach((item) => {
+        const tipo = item.tipo || item.tipoAtendimento || "Outros";
+        contagem.set(tipo, (contagem.get(tipo) || 0) + 1);
+      });
+    const ordenados = [...contagem.entries()].sort((a, b) => b[1] - a[1]);
+    const principais = ordenados.slice(0, 4);
+    const outros = ordenados.slice(4).reduce((total, [, valor]) => total + valor, 0);
+    if (outros > 0) principais.push(["Outros", outros]);
+    const total = principais.reduce((soma, [, valor]) => soma + valor, 0);
+    let acumulado = 0;
+    const fatias = principais.map(([rotulo, valor], indice) => {
+      const inicio = total ? (acumulado / total) * 100 : 0;
+      acumulado += valor;
+      const fim = total ? (acumulado / total) * 100 : 0;
+      return { rotulo, valor, cor: coresTipos[indice % coresTipos.length], inicio, fim };
+    });
+    const gradiente = total
+      ? `conic-gradient(${fatias.map((fatia) => `${fatia.cor} ${fatia.inicio}% ${fatia.fim}%`).join(", ")})`
+      : "conic-gradient(#e2e8f0 0% 100%)";
+    return { fatias, total, gradiente };
+  }, [dados.agendamentos, hoje]);
+
+  const alertas = useMemo<Alerta[]>(() => {
+    const lista: Alerta[] = [];
+    const paraConfirmar = dados.agendamentos.filter(
+      (item) => [hoje, amanha].includes(item.data) && normalizarStatus(item.status) === "aguardando"
+    );
+    if (paraConfirmar.length) {
+      lista.push({
+        id: "confirmacoes",
+        titulo: `${paraConfirmar.length} atendimento(s) sem confirmação`,
+        detalhe: "Hoje e amanhã. Confirme pelo WhatsApp.",
+        href: "/comunicacao",
+      });
+    }
+    const atrasados = dados.financeiro.filter(
+      (item) => item.tipo === "Receita" && normalizarTexto(item.status) === "pendente" && item.data && item.data < hoje
+    );
+    if (atrasados.length) {
+      lista.push({
+        id: "atrasados",
+        titulo: `${atrasados.length} pagamento(s) em atraso`,
+        detalhe: formatarMoeda(atrasados.reduce((total, item) => total + dinheiroParaNumero(item.valor), 0)),
+        href: "/financeiro",
+      });
+    }
+    const retornos = dados.pacientes.filter((item) => normalizarTexto(item.status).includes("retorno"));
+    if (retornos.length) {
+      lista.push({
+        id: "retornos",
+        titulo: `${retornos.length} paciente(s) com retorno pendente`,
+        detalhe: "Chame de volta para não perder o tratamento.",
+        href: "/comunicacao",
+      });
+    }
+    const orcamentosParados = dados.orcamentos.filter(
+      (item) => item.status === "enviado" && (item.criadoEm || "").slice(0, 10) <= somarDias(hoje, -7)
+    );
+    if (orcamentosParados.length) {
+      lista.push({
+        id: "orcamentos",
+        titulo: `${orcamentosParados.length} orçamento(s) sem resposta há 7 dias`,
+        detalhe: "Vale um lembrete para o paciente.",
+        href: "/orcamentos",
+      });
+    }
+    return lista;
+  }, [amanha, dados, hoje]);
+
+  function buscar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const termo = busca.trim();
+    router.push(termo ? `/pacientes?busca=${encodeURIComponent(termo)}` : "/pacientes");
+  }
+
+  const badgePlano = modo === "teste" ? `${nomesPlanos.starter} - ${dias} dias de teste` : `${nomesPlanos[plano]} ativo`;
+  const rotuloPeriodo = periodosFinanceiros.find((item) => item.valor === periodo)?.rotulo || "";
 
   return (
     <main className="min-h-screen bg-[#f6f8fc] text-slate-950">
@@ -308,38 +396,73 @@ function DashboardContent() {
           <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="text-3xl font-black tracking-tight">
-                Ola, Dr(a). Rafael
+                Olá, {perfil.tratamento} {perfil.nome.split(" ")[0]}
               </h1>
               <p className="mt-1 text-base font-medium text-slate-500">
-                Bem-vindo ao seu painel do Clini+
+                {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
               </p>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex h-12 min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-slate-500 shadow-sm sm:w-[380px]">
+              <form
+                onSubmit={buscar}
+                className="flex h-12 min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-slate-500 shadow-sm sm:w-[380px]"
+              >
                 <Search size={19} />
                 <input
+                  value={busca}
+                  onChange={(event) => setBusca(event.target.value)}
                   className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-                  placeholder="Buscar paciente, atendimento, tratamento..."
+                  placeholder="Buscar paciente por nome, CPF ou telefone"
                 />
-              </label>
+              </form>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="relative flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-800 shadow-sm"
-                  aria-label="Notificacoes"
-                >
-                  <Bell size={20} />
-                  <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-rose-500" />
-                </button>
-                <button
-                  type="button"
+                <div ref={painelAlertas} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setAlertasAbertos((aberto) => !aberto)}
+                    className="relative flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-800 shadow-sm"
+                    aria-label="Alertas"
+                    aria-expanded={alertasAbertos}
+                  >
+                    <Bell size={20} />
+                    {alertas.length > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-black text-white">
+                        {alertas.length}
+                      </span>
+                    )}
+                  </button>
+                  {alertasAbertos && (
+                    <div className="absolute right-0 z-40 mt-2 w-80 rounded-lg border border-slate-200 bg-white p-3 shadow-xl">
+                      <p className="px-1 text-sm font-black">Alertas</p>
+                      <div className="mt-2 space-y-2">
+                        {alertas.map((alerta) => (
+                          <Link
+                            key={alerta.id}
+                            href={alerta.href}
+                            className="block rounded-lg bg-slate-50 px-3 py-2 hover:bg-indigo-50"
+                          >
+                            <p className="text-sm font-extrabold text-slate-900">{alerta.titulo}</p>
+                            <p className="text-xs font-semibold text-slate-500">{alerta.detalhe}</p>
+                          </Link>
+                        ))}
+                        {alertas.length === 0 && (
+                          <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
+                            Nenhum alerta no momento.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <Link
+                  href="/comunicacao"
                   className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-800 shadow-sm"
-                  aria-label="Mensagens"
+                  aria-label="Comunicação"
                 >
                   <MessageCircle size={20} />
-                </button>
+                </Link>
                 <Link
                   href="/agenda/novo"
                   className="inline-flex h-12 items-center gap-2 rounded-lg bg-indigo-600 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-indigo-700"
@@ -351,25 +474,20 @@ function DashboardContent() {
             </div>
           </header>
 
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span className="rounded-lg bg-white px-3 py-2 text-xs font-extrabold text-indigo-700 shadow-sm ring-1 ring-slate-200">
+          <div className="mt-5">
+            <Link
+              href="/planos"
+              className="inline-flex rounded-lg bg-white px-3 py-2 text-xs font-extrabold text-indigo-700 shadow-sm ring-1 ring-slate-200"
+            >
               {badgePlano}
-            </span>
-            <span className="rounded-lg bg-white px-3 py-2 text-xs font-extrabold text-slate-600 shadow-sm ring-1 ring-slate-200">
-              Area atual: {areaAtual}
-            </span>
-            {semSessaoOriginal && (
-              <span className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 ring-1 ring-amber-100">
-                Sessao sem plano carregado; exibindo base Starter.
-              </span>
-            )}
+            </Link>
           </div>
 
           <section className="mt-6 grid gap-4 xl:grid-cols-4">
             <MetricCard
               title="Atendimentos hoje"
-              value={String(atendimentosHoje.length)}
-              detail={`${realizadosHoje} realizados - ${restantesHoje} restantes`}
+              value={String(agenda.ativosHoje.length)}
+              detail={`${agenda.atendidos} atendidos - ${Math.max(agenda.ativosHoje.length - agenda.atendidos, 0)} restantes`}
               icon={CalendarDays}
               tone="bg-indigo-500"
             />
@@ -381,16 +499,16 @@ function DashboardContent() {
               tone="bg-sky-500"
             />
             <MetricCard
-              title="Receitas este mes"
-              value={formatMoney(totalReceitas)}
-              detail={`${receitas.length} lancamentos de receita`}
+              title="Recebido este mês"
+              value={formatarMoeda(receitaDoMes.valor)}
+              detail={`${receitaDoMes.quantidade} receita(s) lançada(s) no mês`}
               icon={DollarSign}
               tone="bg-emerald-500"
             />
             <MetricCard
               title="Tratamentos em andamento"
-              value={String(tratamentosEmAndamento)}
-              detail={`${dados.tratamentos.length} tratamentos cadastrados`}
+              value={String(tratamentos.emAndamento)}
+              detail={`${tratamentos.planejados} planejado(s) aguardando início`}
               icon={HeartPulse}
               tone="bg-orange-400"
             />
@@ -403,55 +521,35 @@ function DashboardContent() {
                   <CalendarDays className="text-indigo-600" size={22} />
                   <h2 className="text-lg font-black">Agenda de hoje</h2>
                 </div>
-                <Link
-                  href="/agenda"
-                  className="text-sm font-extrabold text-indigo-700"
-                >
+                <Link href={`/agenda?data=${hoje}&visualizacao=dia`} className="text-sm font-extrabold text-indigo-700">
                   Ver agenda completa
                 </Link>
               </div>
 
               <div className="mt-5 space-y-3">
-                {listaAgenda.length > 0 ? (
-                  listaAgenda.map((item) => (
-                    <div
-                      key={String(item.id)}
-                      className="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[76px_1fr_auto] sm:items-center"
-                    >
-                      <div className="rounded-lg bg-white px-3 py-2 text-center shadow-sm">
-                        <p className="font-black text-slate-950">
-                          {item.horario || item.hora}
-                        </p>
-                        <p className="text-xs font-semibold text-slate-500">
-                          {item.duracao || "45 min"}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-extrabold">
-                          {item.pacienteNome || item.paciente}
-                        </p>
-                        <p className="truncate text-sm font-medium text-slate-500">
-                          {item.tipoAtendimento || item.procedimento || item.tipo}
-                        </p>
-                      </div>
-                      <span
-                        className={`w-fit rounded-lg px-3 py-1 text-xs font-extrabold ${getStatusClass(
-                          item.status
-                        )}`}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                {agenda.doDia.map((item) => (
+                  <ItemAgenda key={String(item.id)} item={item} />
+                ))}
+                {agenda.doDia.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
                     <p className="font-extrabold">Nenhum atendimento hoje</p>
-                    <p className="mt-1 text-sm font-medium text-slate-500">
-                      Use a agenda para cadastrar consultas, retornos e procedimentos.
-                    </p>
+                    <Link href="/agenda/novo" className="mt-1 inline-block text-sm font-bold text-indigo-700">
+                      Agendar atendimento
+                    </Link>
                   </div>
                 )}
               </div>
+
+              {agenda.doDia.length === 0 && agenda.proximos.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-sm font-black text-slate-700">Próximos atendimentos</p>
+                  <div className="mt-3 space-y-3">
+                    {agenda.proximos.map((item) => (
+                      <ItemAgenda key={String(item.id)} item={item} mostrarData />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -460,116 +558,118 @@ function DashboardContent() {
                   <BarChart3 className="text-indigo-600" size={23} />
                   <h2 className="text-lg font-black">Resumo financeiro</h2>
                 </div>
-                <span className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600">
-                  Este mes
-                </span>
+                <select
+                  value={periodo}
+                  onChange={(event) => setPeriodo(event.target.value as PeriodoFinanceiro)}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 outline-none"
+                >
+                  {periodosFinanceiros.map((item) => (
+                    <option key={item.valor} value={item.valor}>
+                      {item.rotulo}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <div className="rounded-lg bg-slate-50 p-4">
-                  <p className="text-sm font-bold text-slate-500">Receitas</p>
-                  <p className="mt-2 text-xl font-black text-slate-950">
-                    {formatMoney(totalReceitas)}
+                  <p className="text-sm font-bold text-slate-500">Recebido</p>
+                  <p className="mt-2 text-xl font-black text-slate-950">{formatarMoeda(financeiro.recebido)}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {formatarMoeda(financeiro.aReceber)} a receber
                   </p>
                 </div>
                 <div className="rounded-lg bg-slate-50 p-4">
-                  <p className="text-sm font-bold text-slate-500">Despesas</p>
-                  <p className="mt-2 text-xl font-black text-slate-950">
-                    {formatMoney(totalDespesas)}
-                  </p>
+                  <p className="text-sm font-bold text-slate-500">Despesas pagas</p>
+                  <p className="mt-2 text-xl font-black text-slate-950">{formatarMoeda(financeiro.pago)}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{rotuloPeriodo}</p>
                 </div>
-                <div className="rounded-lg bg-indigo-50 p-4">
-                  <p className="text-sm font-bold text-indigo-700">Lucro liquido</p>
-                  <p className="mt-2 text-xl font-black text-emerald-600">
-                    {formatMoney(lucroLiquido)}
+                <div className={`rounded-lg p-4 ${financeiro.saldo < 0 ? "bg-rose-50" : "bg-emerald-50"}`}>
+                  <p className={`text-sm font-bold ${financeiro.saldo < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+                    Saldo
                   </p>
+                  <p className={`mt-2 text-xl font-black ${financeiro.saldo < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    {formatarMoeda(financeiro.saldo)}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Recebido menos despesas</p>
                 </div>
               </div>
 
-              <div className="mt-6 h-52 rounded-lg bg-slate-50 p-4">
-                <div className="flex h-full items-end gap-2">
-                  {[42, 55, 48, 68, 62, 74, 70, 82, 78, 88, 84, 94].map(
-                    (height, index) => (
-                      <div
-                        key={index}
-                        className="flex flex-1 flex-col justify-end gap-1"
-                      >
-                        <div
-                          className="rounded-t bg-emerald-400/75"
-                          style={{ height: `${height}%` }}
-                        />
-                        <div
-                          className="rounded-b bg-rose-300/75"
-                          style={{ height: `${Math.max(height - 42, 12)}%` }}
-                        />
-                      </div>
-                    )
-                  )}
+              <div className="mt-6 rounded-lg bg-slate-50 p-4">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                  <span>Últimos 6 meses (valores pagos)</span>
+                  <span className="flex gap-3">
+                    <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />Receitas</span>
+                    <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-300" />Despesas</span>
+                  </span>
                 </div>
+                <div className="mt-4 flex h-40 items-end gap-3">
+                  {financeiro.meses.map((mes) => (
+                    <div key={mes.rotulo} className="flex flex-1 flex-col items-center gap-2">
+                      <div className="flex h-32 w-full items-end justify-center gap-1">
+                        {[{ valor: mes.receitas, cor: "bg-emerald-400" }, { valor: mes.despesas, cor: "bg-rose-300" }].map((barra, indice) => (
+                          <div
+                            key={indice}
+                            title={formatarMoeda(barra.valor)}
+                            className={`w-1/3 rounded-t ${barra.cor}`}
+                            style={{ height: `${financeiro.maiorMes ? Math.max((barra.valor / financeiro.maiorMes) * 100, barra.valor > 0 ? 3 : 0) : 0}%` }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">{mes.rotulo}</span>
+                    </div>
+                  ))}
+                </div>
+                {financeiro.maiorMes === 0 && (
+                  <p className="mt-2 text-center text-xs font-semibold text-slate-500">
+                    Nenhum valor pago nos últimos 6 meses.
+                  </p>
+                )}
               </div>
             </div>
           </section>
 
           <section className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-black">Atendimentos por tipo</h2>
+              <h2 className="text-lg font-black">Atendimentos do mês por tipo</h2>
               <div className="mt-5 grid gap-5 sm:grid-cols-[180px_1fr] sm:items-center">
-                <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-full border-[18px] border-indigo-500 bg-white text-center shadow-inner">
-                  <div>
+                <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-full" style={{ background: tiposAtendimento.gradiente }}>
+                  <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center">
                     <p className="text-xs font-bold text-slate-500">Total</p>
-                    <p className="text-3xl font-black">{totalTipos}</p>
+                    <p className="text-3xl font-black">{tiposAtendimento.total}</p>
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {tiposAtendimento.length > 0 ? (
-                    tiposAtendimento.map((item) => (
-                      <div
-                        key={item.label}
-                        className="flex items-center justify-between gap-3"
-                      >
-                        <span className="flex items-center gap-3 text-sm font-bold text-slate-600">
-                          <span className={`h-3 w-3 rounded-full ${item.color}`} />
-                          {item.label}
-                        </span>
-                        <strong className="text-sm">
-                          {Math.round((item.value / totalTipos) * 100)}% ({item.value})
-                        </strong>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm font-medium text-slate-500">
-                      Sem atendimentos cadastrados ainda.
-                    </p>
+                  {tiposAtendimento.fatias.map((fatia) => (
+                    <div key={fatia.rotulo} className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-3 text-sm font-bold text-slate-600">
+                        <span className="h-3 w-3 rounded-full" style={{ background: fatia.cor }} />
+                        {fatia.rotulo}
+                      </span>
+                      <strong className="text-sm">
+                        {Math.round((fatia.valor / (tiposAtendimento.total || 1)) * 100)}% ({fatia.valor})
+                      </strong>
+                    </div>
+                  ))}
+                  {tiposAtendimento.total === 0 && (
+                    <p className="text-sm font-medium text-slate-500">Nenhum atendimento agendado neste mês.</p>
                   )}
                 </div>
               </div>
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-black">Acessos rapidos</h2>
+              <h2 className="text-lg font-black">Acessos rápidos</h2>
               <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <QuickAction href="/pacientes/novo" label="Novo paciente" icon={Users} />
                 <QuickAction href="/agenda/novo" label="Novo agendamento" icon={CalendarDays} />
-                <QuickAction href="/tratamentos" label="Novo tratamento" icon={HeartPulse} />
-                <QuickAction href="/prontuario/novo" label="Nova consulta" icon={Stethoscope} />
-                <QuickAction href="/prontuario" label="Prontuario rapido" icon={ClipboardList} />
-                <QuickAction href="/financeiro/novo" label="Lancamento financeiro" icon={DollarSign} />
+                <QuickAction href="/prontuario" label="Prontuários" icon={ClipboardList} />
+                <QuickAction href="/orcamentos" label="Orçamentos" icon={Wallet} />
+                <QuickAction href="/tratamentos" label="Tratamentos" icon={HeartPulse} />
+                <QuickAction href="/financeiro/novo" label="Lançamento financeiro" icon={DollarSign} />
                 <QuickAction href="/documentos" label="Documentos" icon={Folder} />
-                <QuickAction href="/relatorios" label="Relatorios" icon={FileText} />
+                <QuickAction href="/relatorios" label="Relatórios" icon={FileText} />
               </div>
-            </div>
-          </section>
-
-          <section className="mt-5 rounded-lg border border-indigo-100 bg-indigo-50 px-5 py-4 text-indigo-900">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Star size={21} />
-                <p className="text-sm font-bold">
-                  Dica do Clini+: mantenha prontuarios, documentos e atendimentos
-                  sempre atualizados para uma gestao mais segura.
-                </p>
-              </div>
-              <ChevronRight size={20} />
             </div>
           </section>
         </section>

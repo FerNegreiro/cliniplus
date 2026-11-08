@@ -1,502 +1,353 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Cake, CalendarCheck, MessageCircle, Receipt, RotateCcw, Wallet } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
-import PremiumCard from "@/components/PremiumCard";
-import Link from "next/link";
+import {
+  getAgendamentos,
+  getLancamentosFinanceiros,
+  getOrcamentos,
+  getPacientes,
+  type CliniplusAgendamento,
+  type CliniplusLancamentoFinanceiro,
+  type CliniplusOrcamento,
+  type CliniplusPaciente,
+} from "@/utils/cliniplusStore";
+import { abrirWhatsApp } from "@/utils/whatsapp";
+import { hojeIso } from "@/utils/datas";
 
-export const dynamic = "force-dynamic";
+type Modelo = {
+  id: string;
+  titulo: string;
+  texto: string;
+};
 
-const mensagens = [
+const modelos: Modelo[] = [
   {
-    paciente: "Maria Silva",
-    tipo: "Lembrete de consulta",
-    canal: "WhatsApp",
-    status: "Agendada",
-    horario: "Hoje às 18:00",
-    categoria: "Consulta",
-    mensagem:
-      "Olá, Maria! Passando para lembrar sua consulta odontológica amanhã às 09:00.",
-  },
-  {
-    paciente: "Pedro Lima",
-    tipo: "Orçamento aprovado",
-    canal: "WhatsApp",
-    status: "Enviada",
-    horario: "Ontem às 14:20",
-    categoria: "Orçamento",
-    mensagem:
-      "Olá, Pedro! Seu orçamento foi aprovado. Podemos seguir com o agendamento do procedimento.",
-  },
-  {
-    paciente: "João Almeida",
-    tipo: "Retorno pendente",
-    canal: "WhatsApp",
-    status: "Pendente",
-    horario: "Aguardando envio",
-    categoria: "Retorno",
-    mensagem:
-      "Olá, João! Precisamos agendar seu retorno para continuar o acompanhamento odontológico.",
-  },
-  {
-    paciente: "Ana Costa",
-    tipo: "Cobrança amigável",
-    canal: "WhatsApp",
-    status: "Rascunho",
-    horario: "Não enviada",
-    categoria: "Financeiro",
-    mensagem:
-      "Olá, Ana! Identificamos uma pendência no seu atendimento. Podemos combinar a melhor forma de pagamento?",
-  },
-];
-
-const modelosRapidos = [
-  {
+    id: "confirmacao",
     titulo: "Confirmação de consulta",
-    descricao: "Mensagem para confirmar presença antes do atendimento.",
-    cor: "bg-cyan-50 text-cyan-700",
+    texto: "Olá, {nome}! Passando para confirmar seu atendimento no dia {data} às {hora}. Podemos confirmar sua presença?",
   },
   {
+    id: "retorno",
     titulo: "Retorno odontológico",
-    descricao: "Chamar paciente para retorno ou acompanhamento.",
-    cor: "bg-emerald-50 text-emerald-700",
+    texto: "Olá, {nome}! Está na hora do seu retorno para acompanharmos o tratamento. Qual o melhor dia e horário para você?",
   },
   {
+    id: "orcamento",
     titulo: "Orçamento pendente",
-    descricao: "Lembrar paciente sobre orçamento ainda não aprovado.",
-    cor: "bg-amber-50 text-amber-700",
+    texto: "Olá, {nome}! Ficou alguma dúvida sobre o orçamento que enviamos? Podemos ajustar a forma de pagamento se precisar.",
   },
   {
+    id: "pos",
     titulo: "Pós-procedimento",
-    descricao: "Orientações após procedimento odontológico.",
-    cor: "bg-purple-50 text-purple-700",
+    texto: "Olá, {nome}! Como você está se sentindo após o procedimento? Qualquer desconforto, é só nos chamar por aqui.",
   },
   {
+    id: "cobranca",
     titulo: "Cobrança amigável",
-    descricao: "Aviso educado sobre pagamento em aberto.",
-    cor: "bg-red-50 text-red-700",
+    texto: "Olá, {nome}! Identificamos um valor em aberto no seu atendimento. Podemos combinar a melhor forma de pagamento?",
+  },
+  {
+    id: "aniversario",
+    titulo: "Aniversário",
+    texto: "Feliz aniversário, {nome}! Toda a equipe deseja um ano cheio de saúde e sorrisos.",
   },
 ];
 
-const campanhas = [
-  {
-    nome: "Pacientes sem retorno",
-    quantidade: 8,
-    descricao: "Pacientes que não voltam há mais de 60 dias.",
-  },
-  {
-    nome: "Limpeza preventiva",
-    quantidade: 14,
-    descricao: "Campanha para profilaxia e revisão odontológica.",
-  },
-  {
-    nome: "Orçamentos não respondidos",
-    quantidade: 5,
-    descricao: "Pacientes que ainda não aprovaram orçamento.",
-  },
-];
+type Dados = {
+  pacientes: CliniplusPaciente[];
+  agendamentos: CliniplusAgendamento[];
+  orcamentos: CliniplusOrcamento[];
+  financeiro: CliniplusLancamentoFinanceiro[];
+};
 
-const modulosComunicacao = [
-  { nome: "Mensagens", detalhe: "Caixa e envios manuais", href: "/comunicacao" },
-  {
-    nome: "Campanhas",
-    detalhe: "Acoes por publico",
-    href: "/relatorios?modulo=campanhas",
-  },
-  { nome: "CRM", detalhe: "Oportunidades", href: "/relatorios?modulo=crm" },
-  {
-    nome: "Retornos",
-    detalhe: "Pacientes para reativar",
-    href: "/relatorios?modulo=retornos",
-  },
-  {
-    nome: "Aniversariantes",
-    detalhe: "Relacionamento",
-    href: "/relatorios?modulo=aniversariantes",
-  },
-];
-
-function getStatusClasse(status: string) {
-  if (status === "Enviada") {
-    return "bg-emerald-100 text-emerald-700";
-  }
-
-  if (status === "Agendada") {
-    return "bg-cyan-100 text-cyan-700";
-  }
-
-  if (status === "Pendente") {
-    return "bg-amber-100 text-amber-700";
-  }
-
-  if (status === "Rascunho") {
-    return "bg-slate-100 text-slate-700";
-  }
-
-  return "bg-slate-100 text-slate-700";
+function primeiroNome(nome?: string) {
+  return (nome || "").trim().split(" ")[0] || "tudo bem";
 }
 
-function getCategoriaClasse(categoria: string) {
-  if (categoria === "Consulta") {
-    return "bg-cyan-50 text-cyan-700";
-  }
+function formatarData(valor?: string) {
+  if (!valor) return "";
+  const [ano, mes, dia] = valor.slice(0, 10).split("-");
+  return ano && mes && dia ? `${dia}/${mes}` : valor;
+}
 
-  if (categoria === "Orçamento") {
-    return "bg-emerald-50 text-emerald-700";
-  }
+function preencher(texto: string, valores: { nome?: string; data?: string; hora?: string }) {
+  return texto
+    .replace(/\{nome\}/g, primeiroNome(valores.nome))
+    .replace(/\{data\}/g, valores.data || "(data)")
+    .replace(/\{hora\}/g, valores.hora || "(horário)");
+}
 
-  if (categoria === "Retorno") {
-    return "bg-amber-50 text-amber-700";
-  }
+function isoDeAmanha() {
+  const amanha = new Date();
+  amanha.setDate(amanha.getDate() + 1);
+  return `${amanha.getFullYear()}-${String(amanha.getMonth() + 1).padStart(2, "0")}-${String(amanha.getDate()).padStart(2, "0")}`;
+}
 
-  if (categoria === "Financeiro") {
-    return "bg-red-50 text-red-700";
-  }
+function mesDeNascimento(paciente: CliniplusPaciente) {
+  const data = paciente.dataNascimento || paciente.nascimento || "";
+  const iso = data.match(/^\d{4}-(\d{2})-\d{2}/);
+  if (iso) return Number(iso[1]);
+  const br = data.match(/^\d{2}\/(\d{2})\/\d{4}/);
+  return br ? Number(br[1]) : 0;
+}
 
-  return "bg-slate-50 text-slate-700";
+function Lista({
+  titulo,
+  icone: Icone,
+  vazio,
+  itens,
+}: {
+  titulo: string;
+  icone: typeof MessageCircle;
+  vazio: string;
+  itens: Array<{ chave: string; nome: string; detalhe: string; acao: () => void }>;
+}) {
+  return (
+    <div className="rounded-3xl bg-white p-6 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+          <Icone size={20} />
+        </span>
+        <div>
+          <h3 className="font-bold">{titulo}</h3>
+          <p className="text-xs text-slate-500">{itens.length} paciente(s)</p>
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {itens.slice(0, 6).map((item) => (
+          <div key={item.chave} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800">{item.nome}</p>
+              <p className="truncate text-xs text-slate-500">{item.detalhe}</p>
+            </div>
+            <button
+              type="button"
+              onClick={item.acao}
+              className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+            >
+              WhatsApp
+            </button>
+          </div>
+        ))}
+        {itens.length === 0 && <p className="text-sm text-slate-500">{vazio}</p>}
+      </div>
+    </div>
+  );
 }
 
 export default function Comunicacao() {
-  const enviadas = mensagens.filter(
-    (mensagem) => mensagem.status === "Enviada"
-  ).length;
+  const [dados, setDados] = useState<Dados>({ pacientes: [], agendamentos: [], orcamentos: [], financeiro: [] });
+  const [pacienteId, setPacienteId] = useState("");
+  const [modeloId, setModeloId] = useState(modelos[0].id);
+  const [mensagem, setMensagem] = useState(modelos[0].texto);
 
-  const agendadas = mensagens.filter(
-    (mensagem) => mensagem.status === "Agendada"
-  ).length;
+  useEffect(() => {
+    function carregar() {
+      setDados({
+        pacientes: getPacientes(),
+        agendamentos: getAgendamentos(),
+        orcamentos: getOrcamentos(),
+        financeiro: getLancamentosFinanceiros(),
+      });
+    }
 
-  const pendentes = mensagens.filter(
-    (mensagem) => mensagem.status === "Pendente"
-  ).length;
+    carregar();
+    const pacienteDaUrl = new URLSearchParams(window.location.search).get("pacienteId");
+    if (pacienteDaUrl) {
+      setPacienteId(pacienteDaUrl);
+    }
 
-  const rascunhos = mensagens.filter(
-    (mensagem) => mensagem.status === "Rascunho"
-  ).length;
+    window.addEventListener("cliniplus:store", carregar);
+    return () => window.removeEventListener("cliniplus:store", carregar);
+  }, []);
+
+  const pacientePorId = useMemo(
+    () => new Map(dados.pacientes.map((paciente) => [String(paciente.id), paciente])),
+    [dados.pacientes]
+  );
+
+  const pacienteSelecionado = pacientePorId.get(pacienteId);
+  const proximoAgendamento = useMemo(() => {
+    const hoje = hojeIso();
+    return dados.agendamentos
+      .filter((item) => String(item.pacienteId) === pacienteId && (item.data || "") >= hoje)
+      .sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))[0];
+  }, [dados.agendamentos, pacienteId]);
+
+  const textoFinal = preencher(mensagem, {
+    nome: pacienteSelecionado?.nome,
+    data: formatarData(proximoAgendamento?.data),
+    hora: proximoAgendamento?.hora || proximoAgendamento?.horario,
+  });
+
+  function escolherModelo(id: string) {
+    setModeloId(id);
+    setMensagem(modelos.find((modelo) => modelo.id === id)?.texto || "");
+  }
+
+  function enviar(paciente: CliniplusPaciente | undefined, modelo: string, extras: { data?: string; hora?: string } = {}) {
+    const texto = modelos.find((item) => item.id === modelo)?.texto || "";
+    abrirWhatsApp(paciente?.telefone, preencher(texto, { nome: paciente?.nome, ...extras }));
+  }
+
+  const listas = useMemo(() => {
+    const amanha = isoDeAmanha();
+    const mesAtual = new Date().getMonth() + 1;
+
+    const confirmacoes = dados.agendamentos
+      .filter((item) => item.data === amanha && !(item.status || "").toLowerCase().includes("cancel"))
+      .map((item) => {
+        const paciente = pacientePorId.get(String(item.pacienteId));
+        const hora = item.hora || item.horario;
+        return {
+          chave: `conf-${item.id}`,
+          nome: paciente?.nome || item.paciente || "Paciente",
+          detalhe: `Amanhã às ${hora || "-"}`,
+          acao: () => enviar(paciente, "confirmacao", { data: formatarData(item.data), hora }),
+        };
+      });
+
+    const retornos = dados.pacientes
+      .filter((paciente) => (paciente.status || "").toLowerCase().includes("retorno"))
+      .map((paciente) => ({
+        chave: `ret-${paciente.id}`,
+        nome: paciente.nome,
+        detalhe: "Retorno pendente",
+        acao: () => enviar(paciente, "retorno"),
+      }));
+
+    const orcamentos = dados.orcamentos
+      .filter((item) => item.status === "enviado")
+      .map((item) => {
+        const paciente = pacientePorId.get(String(item.pacienteId));
+        return {
+          chave: `orc-${item.id}`,
+          nome: paciente?.nome || "Paciente",
+          detalhe: `Orçamento ${item.numero} aguardando aprovação`,
+          acao: () => enviar(paciente, "orcamento"),
+        };
+      });
+
+    const cobrancas = dados.financeiro
+      .filter((item) => item.tipo === "Receita" && (item.status || "").toLowerCase() === "pendente" && item.pacienteId)
+      .map((item) => {
+        const paciente = pacientePorId.get(String(item.pacienteId));
+        return {
+          chave: `fin-${item.id}`,
+          nome: paciente?.nome || item.paciente || "Paciente",
+          detalhe: `${item.descricao} - ${item.valor}`,
+          acao: () => enviar(paciente, "cobranca"),
+        };
+      });
+
+    const aniversariantes = dados.pacientes
+      .filter((paciente) => mesDeNascimento(paciente) === mesAtual)
+      .map((paciente) => ({
+        chave: `aniv-${paciente.id}`,
+        nome: paciente.nome,
+        detalhe: "Aniversariante do mês",
+        acao: () => enviar(paciente, "aniversario"),
+      }));
+
+    return { confirmacoes, retornos, orcamentos, cobrancas, aniversariantes };
+  }, [dados, pacientePorId]);
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="flex min-h-screen">
         <Sidebar active="Comunicação" />
 
-        <section className="min-w-0 flex-1 p-6">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-            <div>
-              <h2 className="text-3xl font-bold">Comunicação</h2>
-              <p className="mt-1 text-slate-500">
-                Central de mensagens para WhatsApp, lembretes, retornos,
-                cobranças e relacionamento com pacientes
-              </p>
-            </div>
+        <section className="flex-1 p-8">
+          <h2 className="text-3xl font-bold">Comunicação</h2>
+          <p className="mt-1 text-slate-500">
+            Mensagens prontas para enviar pelo WhatsApp Web, usando os dados dos seus pacientes.
+          </p>
 
-            <button
-              type="button"
-              className="rounded-xl bg-cyan-600 px-5 py-3 font-semibold text-white"
-            >
-              Nova mensagem
-            </button>
-          </div>
-
-          <div className="mt-6 grid gap-5 md:grid-cols-4">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Enviadas</p>
-              <h3 className="mt-3 text-3xl font-bold">128</h3>
-              <p className="mt-1 text-xs text-emerald-600">
-                Nos últimos 30 dias
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Agendadas</p>
-              <h3 className="mt-3 text-3xl font-bold">12</h3>
-              <p className="mt-1 text-xs text-cyan-600">
-                Lembretes programados
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Pendentes</p>
-              <h3 className="mt-3 text-3xl font-bold">4</h3>
-              <p className="mt-1 text-xs text-amber-600">
-                Precisam de revisão
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Taxa de resposta</p>
-              <h3 className="mt-3 text-3xl font-bold">76%</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Estimativa geral
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {modulosComunicacao.map((modulo) => (
-              <Link
-                key={modulo.nome}
-                href={modulo.href}
-                className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50"
-              >
-                <p className="text-sm font-bold text-slate-900">{modulo.nome}</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">
-                  {modulo.detalhe}
-                </p>
-              </Link>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-5 xl:grid-cols-3">
-            <div className="space-y-5 xl:col-span-2">
-              <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                  <div>
-                    <h3 className="text-xl font-bold">Caixa de mensagens</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Acompanhe mensagens enviadas, agendadas, pendentes e
-                      rascunhos
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <input
-                      type="text"
-                      placeholder="Buscar paciente..."
-                      className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none"
-                    />
-
-                    <select className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none">
-                      <option>Todos</option>
-                      <option>Enviadas</option>
-                      <option>Agendadas</option>
-                      <option>Pendentes</option>
-                      <option>Rascunhos</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mt-6 space-y-4">
-                  {mensagens.map((mensagem) => (
-                    <div
-                      key={`${mensagem.paciente}-${mensagem.tipo}`}
-                      className="rounded-3xl border border-slate-100 bg-slate-50 p-5 transition hover:border-cyan-200 hover:bg-white"
-                    >
-                      <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
-                        <div className="flex gap-4">
-                          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-cyan-100 font-bold text-cyan-700">
-                            {mensagem.paciente
-                              .split(" ")
-                              .map((nome) => nome[0])
-                              .slice(0, 2)
-                              .join("")}
-                          </div>
-
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="font-bold">{mensagem.tipo}</h4>
-
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasse(
-                                  mensagem.status
-                                )}`}
-                              >
-                                {mensagem.status}
-                              </span>
-
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getCategoriaClasse(
-                                  mensagem.categoria
-                                )}`}
-                              >
-                                {mensagem.categoria}
-                              </span>
-                            </div>
-
-                            <p className="mt-1 text-sm text-slate-500">
-                              Paciente:{" "}
-                              <span className="font-semibold text-slate-700">
-                                {mensagem.paciente}
-                              </span>
-                            </p>
-
-                            <p className="mt-1 text-sm text-slate-500">
-                              Canal: {mensagem.canal} • {mensagem.horario}
-                            </p>
-
-                            <p className="mt-3 max-w-2xl text-sm text-slate-600">
-                              {mensagem.mensagem}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex w-full flex-col gap-3 lg:w-40">
-                          <button
-                            type="button"
-                            className="rounded-xl bg-cyan-600 px-4 py-3 text-center text-sm font-semibold text-white"
-                          >
-                            Enviar
-                          </button>
-
-                          <button
-                            type="button"
-                            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700"
-                          >
-                            Editar
-                          </button>
-
-                          <Link
-                            href="/pacientes"
-                            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700"
-                          >
-                            Paciente
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                <h3 className="text-xl font-bold">Campanhas futuras</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Ideias de campanhas automáticas para manter pacientes ativos
-                </p>
-
-                <div className="mt-6 grid gap-4 md:grid-cols-3">
-                  {campanhas.map((campanha) => (
-                    <div
-                      key={campanha.nome}
-                      className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <h4 className="font-bold">{campanha.nome}</h4>
-
-                        <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold text-cyan-700">
-                          {campanha.quantidade}
-                        </span>
-                      </div>
-
-                      <p className="mt-3 text-sm text-slate-500">
-                        {campanha.descricao}
-                      </p>
-
-                      <button
-                        type="button"
-                        className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-                      >
-                        Preparar campanha
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                <h3 className="text-xl font-bold">Resumo</h3>
-
-                <div className="mt-5 space-y-4">
-                  <div className="rounded-2xl bg-emerald-50 p-4">
-                    <p className="font-semibold text-emerald-700">
-                      {enviadas} enviada
-                    </p>
-                    <p className="mt-1 text-sm text-emerald-700">
-                      Mensagens já entregues ao paciente.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-cyan-50 p-4">
-                    <p className="font-semibold text-cyan-700">
-                      {agendadas} agendada
-                    </p>
-                    <p className="mt-1 text-sm text-cyan-700">
-                      Programada para envio automático.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-amber-50 p-4">
-                    <p className="font-semibold text-amber-700">
-                      {pendentes} pendente
-                    </p>
-                    <p className="mt-1 text-sm text-amber-700">
-                      Precisa de revisão ou envio manual.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="font-semibold text-slate-700">
-                      {rascunhos} rascunho
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Mensagem preparada e ainda não enviada.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                <h3 className="text-xl font-bold">Modelos rápidos</h3>
-
-                <div className="mt-5 space-y-4">
-                  {modelosRapidos.map((modelo) => (
-                    <button
-                      key={modelo.titulo}
-                      type="button"
-                      className="w-full rounded-2xl bg-slate-50 p-4 text-left transition hover:bg-cyan-50"
-                    >
-                      <p
-                        className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${modelo.cor}`}
-                      >
+          <div className="mt-8 grid gap-6 xl:grid-cols-3">
+            <div className="rounded-3xl bg-white p-6 shadow-sm xl:col-span-2">
+              <h3 className="text-xl font-bold">Nova mensagem</h3>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold">Paciente</span>
+                  <select
+                    value={pacienteId}
+                    onChange={(event) => setPacienteId(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none"
+                  >
+                    <option value="">Selecione um paciente</option>
+                    {dados.pacientes.map((paciente) => (
+                      <option key={String(paciente.id)} value={String(paciente.id)}>
+                        {paciente.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-semibold">Modelo</span>
+                  <select
+                    value={modeloId}
+                    onChange={(event) => escolherModelo(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none"
+                  >
+                    {modelos.map((modelo) => (
+                      <option key={modelo.id} value={modelo.id}>
                         {modelo.titulo}
-                      </p>
-
-                      <p className="mt-3 text-sm text-slate-500">
-                        {modelo.descricao}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
-              <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-                <h3 className="text-xl font-bold text-emerald-800">
-                  Dica Clini+
-                </h3>
+              <label className="mt-4 block">
+                <span className="text-sm font-semibold">Mensagem</span>
+                <textarea
+                  rows={4}
+                  value={mensagem}
+                  onChange={(event) => setMensagem(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none"
+                />
+                <span className="mt-1 block text-xs text-slate-500">
+                  Use {"{nome}"}, {"{data}"} e {"{hora}"} para preencher com os dados do paciente e do próximo agendamento.
+                </span>
+              </label>
 
-                <p className="mt-2 text-sm text-emerald-700">
-                  A comunicação deve estar conectada com agenda, pacientes,
-                  financeiro e retornos. Assim a clínica perde menos consultas e
-                  melhora o relacionamento.
+              <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Prévia</p>
+                <p className="mt-2 whitespace-pre-wrap">{textoFinal}</p>
+              </div>
+
+              {pacienteSelecionado && !pacienteSelecionado.telefone && (
+                <p className="mt-3 text-sm font-semibold text-amber-700">
+                  Este paciente não tem telefone cadastrado. O WhatsApp vai abrir para você escolher o contato.
                 </p>
+              )}
 
-                <Link
-                  href="/agenda"
-                  className="mt-5 inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-700"
-                >
-                  Ver agenda
-                </Link>
-              </div>
-
-              <PremiumCard
-                title="WhatsApp automático"
-                description="Automatize lembretes, confirmações, retornos, cobranças e envio de orçamento pelo WhatsApp."
-              />
+              <button
+                type="button"
+                disabled={!pacienteSelecionado}
+                onClick={() => abrirWhatsApp(pacienteSelecionado?.telefone, textoFinal)}
+                className="mt-5 inline-flex h-12 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <MessageCircle size={18} />
+                Abrir no WhatsApp
+              </button>
             </div>
+
+            <Lista
+              titulo="Confirmar consultas de amanhã"
+              icone={CalendarCheck}
+              vazio="Nenhum agendamento para amanhã."
+              itens={listas.confirmacoes}
+            />
           </div>
 
-          <div className="mt-6 grid gap-5 lg:grid-cols-3">
-            <PremiumCard
-              title="Campanhas automáticas"
-              description="Crie campanhas para pacientes sem retorno, manutenção preventiva e acompanhamento pós-procedimento."
-            />
-
-            <PremiumCard
-              title="IA para mensagens"
-              description="Gere mensagens profissionais com IA para lembretes, orientações e comunicação com pacientes."
-            />
-
-            <PremiumCard
-              title="Histórico de conversas"
-              description="Veja todas as mensagens enviadas e recebidas no histórico do paciente."
-            />
+          <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <Lista titulo="Retornos pendentes" icone={RotateCcw} vazio="Nenhum retorno pendente." itens={listas.retornos} />
+            <Lista titulo="Orçamentos sem resposta" icone={Receipt} vazio="Nenhum orçamento aguardando." itens={listas.orcamentos} />
+            <Lista titulo="Pagamentos pendentes" icone={Wallet} vazio="Nenhuma cobrança pendente." itens={listas.cobrancas} />
+            <Lista titulo="Aniversariantes do mês" icone={Cake} vazio="Nenhum aniversariante este mês." itens={listas.aniversariantes} />
           </div>
         </section>
       </div>

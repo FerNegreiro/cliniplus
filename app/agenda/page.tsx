@@ -3,7 +3,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  Bell,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -31,32 +30,14 @@ import {
   type CliniplusAgendamento,
   deleteAgendamento,
   getAgendamentos,
+  getPacienteById,
+  configClinicaPadrao,
+  horariosDeAtendimento,
+  nomeExibicaoProfissional,
   updateAgendamento,
 } from "@/utils/cliniplusStore";
-
-type StatusAgenda =
-  | "confirmado"
-  | "em_atendimento"
-  | "aguardando"
-  | "cancelado"
-  | "bloqueio"
-  | "outro";
-
-const horarios = [
-  "07:00",
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-];
+import { abrirWhatsApp } from "@/utils/whatsapp";
+import { labelStatus, normalizarStatus, type StatusAgenda } from "@/utils/agendaStatus";
 
 const diasSemana = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 
@@ -64,6 +45,7 @@ const statusOptions = [
   { value: "todos", label: "Todos" },
   { value: "confirmado", label: "Confirmado" },
   { value: "em_atendimento", label: "Em atendimento" },
+  { value: "concluido", label: "Atendido" },
   { value: "aguardando", label: "Aguardando" },
   { value: "cancelado", label: "Cancelado" },
   { value: "bloqueio", label: "Bloqueio" },
@@ -181,43 +163,6 @@ function normalizarTexto(valor?: string) {
     .replace(/[\s-]+/g, "_");
 }
 
-function normalizarStatus(status?: string): StatusAgenda {
-  const texto = normalizarTexto(status);
-
-  if (texto.includes("confirm")) {
-    return "confirmado";
-  }
-
-  if (texto.includes("atendimento")) {
-    return "em_atendimento";
-  }
-
-  if (texto.includes("aguard") || texto.includes("pendente")) {
-    return "aguardando";
-  }
-
-  if (texto.includes("cancel") || texto.includes("falta")) {
-    return "cancelado";
-  }
-
-  if (texto.includes("bloque")) {
-    return "bloqueio";
-  }
-
-  return "outro";
-}
-
-function labelStatus(status?: string) {
-  const normalizado = normalizarStatus(status);
-
-  if (normalizado === "confirmado") return "Confirmado";
-  if (normalizado === "em_atendimento") return "Em atendimento";
-  if (normalizado === "aguardando") return "Aguardando";
-  if (normalizado === "cancelado") return "Cancelado";
-  if (normalizado === "bloqueio") return "Bloqueio";
-  return status || "Sem status";
-}
-
 function getPacienteNome(agendamento: CliniplusAgendamento) {
   return agendamento.pacienteNome || agendamento.paciente || "Paciente";
 }
@@ -240,7 +185,7 @@ function getHoraBase(horario: string) {
 }
 
 function getProfissional(agendamento: CliniplusAgendamento) {
-  return agendamento.profissional || "Dr. Rafael Oliveira";
+  return agendamento.profissional || nomeExibicaoProfissional();
 }
 
 function getUnidade(agendamento: CliniplusAgendamento) {
@@ -248,13 +193,11 @@ function getUnidade(agendamento: CliniplusAgendamento) {
 }
 
 function getEspecialidade(agendamento: CliniplusAgendamento) {
-  const texto = getTipoAtendimento(agendamento).toLowerCase();
+  if (agendamento.especialidade) return agendamento.especialidade;
 
-  if (texto.includes("fisioterapia")) return "Fisioterapia";
-  if (texto.includes("nutri")) return "Nutricao";
-  if (texto.includes("psic")) return "Psicologia";
-  if (texto.includes("estet") || texto.includes("hof")) return "Estetica / HOF";
-  return "Odontologia";
+  const texto = getTipoAtendimento(agendamento).toLowerCase();
+  if (texto.includes("estet") || texto.includes("hof")) return "HOF";
+  return "Clinica geral";
 }
 
 function statusCardClasses(status?: string) {
@@ -266,6 +209,10 @@ function statusCardClasses(status?: string) {
 
   if (normalizado === "em_atendimento") {
     return "border-violet-200 bg-violet-50 text-violet-950";
+  }
+
+  if (normalizado === "concluido") {
+    return "border-slate-200 bg-slate-50 text-slate-600";
   }
 
   if (normalizado === "aguardando") {
@@ -288,6 +235,7 @@ function statusDotClasses(status?: string) {
 
   if (normalizado === "confirmado") return "bg-emerald-500";
   if (normalizado === "em_atendimento") return "bg-violet-500";
+  if (normalizado === "concluido") return "bg-slate-400";
   if (normalizado === "aguardando") return "bg-orange-500";
   if (normalizado === "cancelado") return "bg-rose-500";
   if (normalizado === "bloqueio") return "bg-slate-500";
@@ -307,6 +255,7 @@ function valoresUnicos(valores: string[]) {
 export default function Agenda() {
   const [dataSelecionada, setDataSelecionada] = useState(hojeIso);
   const [visualizacao, setVisualizacao] = useState("Semana");
+  const [horarios, setHorarios] = useState<string[]>(() => horariosDeAtendimento(configClinicaPadrao));
   const [busca, setBusca] = useState("");
   const [profissional, setProfissional] = useState("Todos");
   const [unidade, setUnidade] = useState("Todas");
@@ -317,6 +266,10 @@ export default function Agenda() {
   const [selecionadoId, setSelecionadoId] = useState<string | number | null>(null);
   const [mensagem, setMensagem] = useState("");
   const [destacarLivres, setDestacarLivres] = useState(false);
+
+  useEffect(() => {
+    setHorarios(horariosDeAtendimento());
+  }, []);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -444,24 +397,24 @@ export default function Agenda() {
     [agendamentosFiltrados]
   );
 
-  const agendamentosHoje = agendamentos.filter((item) => item.data === hoje);
+  const agendamentosDoPeriodo = agendamentosFiltrados.filter(
+    (item) => normalizarStatus(item.status) !== "bloqueio"
+  );
+  const contarStatus = (alvo: StatusAgenda) =>
+    agendamentosDoPeriodo.filter((item) => normalizarStatus(item.status) === alvo).length;
   const resumo = {
-    hoje: agendamentosHoje.length,
-    confirmados: agendamentosHoje.filter(
-      (item) => normalizarStatus(item.status) === "confirmado"
-    ).length,
-    aguardando: agendamentosHoje.filter(
-      (item) => normalizarStatus(item.status) === "aguardando"
-    ).length,
-    cancelados: agendamentosHoje.filter(
-      (item) => normalizarStatus(item.status) === "cancelado"
-    ).length,
+    total: agendamentosDoPeriodo.length,
+    confirmados: contarStatus("confirmado"),
+    aguardando: contarStatus("aguardando"),
+    cancelados: contarStatus("cancelado"),
     profissionais: valoresUnicos(
-      agendamentosHoje
+      agendamentosDoPeriodo
         .filter((item) => normalizarStatus(item.status) !== "cancelado")
         .map(getProfissional)
     ).length,
   };
+  const nomePeriodo =
+    visualizacao === "Dia" ? "do dia" : visualizacao === "Mes" ? "do mes" : "da semana";
 
   const selecionado = useMemo(
     () =>
@@ -473,6 +426,17 @@ export default function Agenda() {
   const aguardando = agendamentosFiltrados.filter(
     (item) => normalizarStatus(item.status) === "aguardando"
   );
+  const horariosLivres = diasVisiveis
+    .filter((dia) => criarDataLocal(dia.iso).getDay() !== 0)
+    .reduce((total, dia) => {
+      const ocupados = new Set(
+        (agendamentosPorDia[dia.iso] || [])
+          .filter((item) => normalizarStatus(item.status) !== "cancelado")
+          .map((item) => getHoraBase(getHorario(item)))
+      );
+      return total + horarios.filter((hora) => !ocupados.has(hora)).length;
+    }, 0);
+
   const encaixes = agendamentosFiltrados.filter(
     (item) =>
       normalizarStatus(item.status) === "aguardando" ||
@@ -480,8 +444,17 @@ export default function Agenda() {
       !getHorario(item)
   );
 
+  function enviarLembrete(agendamento: CliniplusAgendamento) {
+    const paciente = getPacienteById(agendamento.pacienteId);
+    const nome = (paciente?.nome || getPacienteNome(agendamento)).split(" ")[0];
+    abrirWhatsApp(
+      paciente?.telefone,
+      `Olá, ${nome}! Passando para confirmar seu atendimento no dia ${formatarDataCurta(agendamento.data)} às ${getHorario(agendamento)}. Podemos confirmar sua presença?`
+    );
+  }
+
   function atualizarStatus(agendamento: CliniplusAgendamento, novoStatus: string) {
-    updateAgendamento(agendamento.id, { status: novoStatus });
+    updateAgendamento(agendamento.id, { status: labelStatus(novoStatus) });
     setSelecionadoId(agendamento.id);
     setMensagem(`Status de ${getPacienteNome(agendamento)} atualizado.`);
   }
@@ -548,31 +521,19 @@ export default function Agenda() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-700 shadow-sm"
-                  aria-label="Notificacoes"
-                >
-                  <Bell size={19} />
-                  {aguardando.length > 0 && (
-                    <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
-                  )}
-                </button>
-                <button
-                  type="button"
+                <Link
+                  href="/comunicacao"
                   className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-indigo-700 shadow-sm"
-                  aria-label="Mensagens"
-                  onClick={() => setMensagem("Central de mensagens aberta para esta agenda.")}
+                  aria-label="Comunicação"
                 >
                   <MessageSquare size={19} />
-                </button>
+                </Link>
                 <Link
                   href="/agenda/novo"
                   className="inline-flex h-11 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-indigo-700"
                 >
                   <Plus size={18} />
                   Novo agendamento
-                  <ChevronDown size={16} />
                 </Link>
               </div>
             </div>
@@ -586,14 +547,19 @@ export default function Agenda() {
 
           <div className="mt-5 flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"
-              >
+              <label className="relative inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700">
                 <CalendarDays size={18} className="text-indigo-600" />
                 {periodo}
                 <ChevronDown size={15} />
-              </button>
+                <input
+                  type="date"
+                  aria-label="Escolher data"
+                  value={dataSelecionada}
+                  onChange={(event) => event.target.value && setDataSelecionada(event.target.value)}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => setDataSelecionada(hoje)}
@@ -722,37 +688,37 @@ export default function Agenda() {
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {[
               {
-                titulo: "Atendimentos hoje",
-                valor: resumo.hoje,
-                detalhe: "Agenda real do dia",
+                titulo: `Atendimentos ${nomePeriodo}`,
+                valor: resumo.total,
+                detalhe: "No periodo exibido",
                 icon: CalendarDays,
                 classe: "bg-indigo-600 text-white",
               },
               {
                 titulo: "Confirmados",
                 valor: resumo.confirmados,
-                detalhe: "Prontos para atender",
+                detalhe: `Confirmados ${nomePeriodo}`,
                 icon: CheckCircle2,
                 classe: "bg-emerald-500 text-white",
               },
               {
                 titulo: "Aguardando confirmacao",
                 valor: resumo.aguardando,
-                detalhe: "Pendentes de retorno",
+                detalhe: "Pedem confirmacao do paciente",
                 icon: Clock3,
                 classe: "bg-orange-400 text-white",
               },
               {
                 titulo: "Cancelados / Faltas",
                 valor: resumo.cancelados,
-                detalhe: "No dia de hoje",
+                detalhe: `Cancelados ${nomePeriodo}`,
                 icon: XCircle,
                 classe: "bg-rose-500 text-white",
               },
               {
                 titulo: "Profissionais ativos",
                 valor: resumo.profissionais,
-                detalhe: "Com agenda hoje",
+                detalhe: `Com agenda ${nomePeriodo}`,
                 icon: Users,
                 classe: "bg-blue-600 text-white",
               },
@@ -1086,14 +1052,6 @@ export default function Agenda() {
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMensagem("Horario bloqueado deve ser criado como status Bloqueio em novo agendamento.")}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-indigo-700"
-                  >
-                    <Lock size={15} />
-                    Bloquear horario
-                  </button>
                   <Link
                     href="/agenda/novo?tipo=Teleconsulta"
                     className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-indigo-700"
@@ -1101,14 +1059,6 @@ export default function Agenda() {
                     <Video size={15} />
                     Teleconsulta
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() => setMensagem("Agenda repetida preparada para a proxima semana.")}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-indigo-700"
-                  >
-                    <RotateCcw size={15} />
-                    Repetir agenda
-                  </button>
                   <button
                     type="button"
                     onClick={() => window.print()}
@@ -1187,7 +1137,7 @@ export default function Agenda() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setMensagem("Lembrete marcado como enviado.")}
+                        onClick={() => enviarLembrete(item)}
                         className="shrink-0 text-xs font-black text-indigo-700"
                       >
                         Enviar
@@ -1257,14 +1207,36 @@ export default function Agenda() {
                     </div>
 
                     <div className="mt-5 grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => atualizarStatus(selecionado, "em_atendimento")}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-3 text-xs font-black text-white"
-                      >
-                        <CheckCircle2 size={15} />
-                        Check-in
-                      </button>
+                      {normalizarStatus(selecionado.status) === "em_atendimento" ? (
+                        <button
+                          type="button"
+                          onClick={() => atualizarStatus(selecionado, "concluido")}
+                          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 text-xs font-black text-white"
+                        >
+                          <CheckCircle2 size={15} />
+                          Finalizar
+                        </button>
+                      ) : normalizarStatus(selecionado.status) === "concluido" ? (
+                        <Link
+                          href={`/financeiro/novo?pacienteId=${selecionado.pacienteId}&descricao=${encodeURIComponent(
+                            selecionado.procedimento || getTipoAtendimento(selecionado)
+                          )}`}
+                          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white"
+                        >
+                          <CheckCircle2 size={15} />
+                          Lançar pagamento
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={normalizarStatus(selecionado.status) === "cancelado"}
+                          onClick={() => atualizarStatus(selecionado, "em_atendimento")}
+                          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-3 text-xs font-black text-white disabled:opacity-40"
+                        >
+                          <CheckCircle2 size={15} />
+                          Check-in
+                        </button>
+                      )}
                       <Link
                         href={`/agenda/novo?agendamentoId=${selecionado.id}&paciente=${encodeURIComponent(
                           getPacienteNome(selecionado)
@@ -1276,7 +1248,7 @@ export default function Agenda() {
                       </Link>
                       <button
                         type="button"
-                        onClick={() => setMensagem("Lembrete marcado como enviado.")}
+                        onClick={() => enviarLembrete(selecionado)}
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-indigo-200 px-3 text-xs font-black text-indigo-700"
                       >
                         <Send size={15} />
@@ -1316,18 +1288,15 @@ export default function Agenda() {
                 <Sparkles size={18} />
               </span>
               <p className="min-w-0 text-sm font-bold text-indigo-900">
-                <strong>IA do Clini+:</strong> Existem horarios livres que podem receber encaixes hoje.
+                <strong>{horariosLivres} horario(s) livre(s)</strong> {visualizacao === "Dia" ? "neste dia" : visualizacao === "Mes" ? "neste mes" : "nesta semana"}, no horario de atendimento, para encaixes e retornos.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setDestacarLivres((valor) => !valor);
-                setMensagem("Horarios livres destacados na grade.");
-              }}
+              onClick={() => setDestacarLivres((valor) => !valor)}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-black text-indigo-700"
             >
-              Ver sugestoes
+              {destacarLivres ? "Ocultar destaque" : "Destacar na grade"}
               <ChevronRight size={16} />
             </button>
           </div>

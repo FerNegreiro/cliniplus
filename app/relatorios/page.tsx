@@ -1,608 +1,297 @@
-import Sidebar from "@/components/Sidebar";
-import ModuloEmPreparacao from "@/components/ModuloEmPreparacao";
-import PremiumCard from "@/components/PremiumCard";
+"use client";
+
 import Link from "next/link";
-import { pacientes } from "@/data/pacientes";
-import { consultas } from "@/data/consultas";
-import { lancamentos } from "@/data/financeiro";
+import { useEffect, useMemo, useState } from "react";
+import Sidebar from "@/components/Sidebar";
+import {
+  getAgendamentos,
+  getLancamentosFinanceiros,
+  getOrcamentos,
+  getPacientes,
+  getTratamentos,
+  type CliniplusAgendamento,
+  type CliniplusLancamentoFinanceiro,
+  type CliniplusOrcamento,
+  type CliniplusPaciente,
+  type CliniplusTratamento,
+} from "@/utils/cliniplusStore";
+import { dinheiroParaNumero, formatarMoeda, normalizarTexto } from "@/utils/format";
 
-export const dynamic = "force-dynamic";
+type Periodo = "30" | "90" | "365" | "tudo";
 
-const procedimentos = [
-  {
-    nome: "Restaurações",
-    quantidade: 12,
-    porcentagem: "80%",
-    cor: "bg-cyan-500",
-  },
-  {
-    nome: "Profilaxias",
-    quantidade: 9,
-    porcentagem: "60%",
-    cor: "bg-emerald-500",
-  },
-  {
-    nome: "Tratamento de canal",
-    quantidade: 4,
-    porcentagem: "35%",
-    cor: "bg-red-500",
-  },
-  {
-    nome: "Clareamentos",
-    quantidade: 6,
-    porcentagem: "45%",
-    cor: "bg-amber-500",
-  },
-];
-
-const desempenhoMes = [
-  {
-    mes: "Jan",
-    receita: "R$ 8.400",
-    atendimentos: 28,
-  },
-  {
-    mes: "Fev",
-    receita: "R$ 9.800",
-    atendimentos: 34,
-  },
-  {
-    mes: "Mar",
-    receita: "R$ 11.200",
-    atendimentos: 39,
-  },
-  {
-    mes: "Abr",
-    receita: "R$ 13.600",
-    atendimentos: 46,
-  },
-  {
-    mes: "Mai",
-    receita: "R$ 15.900",
-    atendimentos: 52,
-  },
-  {
-    mes: "Jun",
-    receita: "R$ 18.450",
-    atendimentos: 61,
-  },
-];
-
-const tratamentos = [
-  {
-    paciente: "Maria Silva",
-    tratamento: "Restauração dente 16",
-    status: "Em andamento",
-    valor: "R$ 280",
-  },
-  {
-    paciente: "João Almeida",
-    tratamento: "Tratamento de canal",
-    status: "Urgente",
-    valor: "R$ 750",
-  },
-  {
-    paciente: "Ana Costa",
-    tratamento: "Clareamento caseiro",
-    status: "Planejado",
-    valor: "R$ 450",
-  },
-];
-
-type RelatoriosProps = {
-  searchParams?: Promise<{
-    modulo?: string;
-  }>;
+type Dados = {
+  pacientes: CliniplusPaciente[];
+  agendamentos: CliniplusAgendamento[];
+  financeiro: CliniplusLancamentoFinanceiro[];
+  tratamentos: CliniplusTratamento[];
+  orcamentos: CliniplusOrcamento[];
 };
 
-const modulosEmPreparacao: Record<string, string> = {
-  "contas-receber":
-    "Acompanhe recebimentos previstos, pagamentos em atraso e valores confirmados da clinica.",
-  "contas-pagar":
-    "Organize despesas fixas, custos variaveis e compromissos financeiros futuros.",
-  caixa:
-    "Veja entradas, saidas e saldo operacional em uma leitura simples para a rotina da clinica.",
-  "formas-pagamento":
-    "Configure cartao, Pix, boleto e outras formas de recebimento quando a integracao financeira estiver ativa.",
-  "relatorio-agenda":
-    "Analise ocupacao da agenda, faltas, encaixes, retornos e produtividade por periodo.",
-  "relatorio-pacientes":
-    "Acompanhe crescimento da base, pacientes ativos, retornos pendentes e origem dos atendimentos.",
-  "relatorio-financeiro":
-    "Veja receitas, despesas, pendencias, saldo previsto e indicadores financeiros da clinica.",
-  "relatorio-tratamentos":
-    "Acompanhe tratamentos em andamento, concluidos, urgentes e planejados.",
-  "relatorio-orcamentos":
-    "Entenda orcamentos enviados, aprovados, pendentes e oportunidades de conversao.",
-  campanhas:
-    "Crie campanhas para retornos, prevencao, orcamentos pendentes e relacionamento com pacientes.",
-  crm: "Organize oportunidades, interessados, pacientes sem agendamento e reativacoes.",
-  retornos:
-    "Acompanhe pacientes que precisam retornar e transforme pendencias em agenda preenchida.",
-  aniversariantes:
-    "Veja aniversariantes do periodo e prepare mensagens de relacionamento.",
-  "assinatura-eletronica":
-    "Prepare termos, contratos e documentos para assinatura digital em uma etapa futura.",
-  laboratorio:
-    "Controle pedidos de laboratorio, prazos, status e documentos associados aos tratamentos.",
-  integracoes:
-    "Conecte o Clini+ com ferramentas externas quando as integracoes forem liberadas.",
-  "ia-prontuario":
-    "Use recursos inteligentes para apoiar resumos, organizacao e revisao de prontuarios.",
-};
-
-const cardsRelatorios = [
-  {
-    nome: "Relatorio de agenda",
-    href: "/relatorios?modulo=relatorio-agenda",
-    detalhe: "Ocupacao, faltas e encaixes",
-  },
-  {
-    nome: "Relatorio de pacientes",
-    href: "/relatorios?modulo=relatorio-pacientes",
-    detalhe: "Base ativa e retornos",
-  },
-  {
-    nome: "Relatorio financeiro",
-    href: "/relatorios?modulo=relatorio-financeiro",
-    detalhe: "Receitas, despesas e saldo",
-  },
-  {
-    nome: "Relatorio de tratamentos",
-    href: "/relatorios?modulo=relatorio-tratamentos",
-    detalhe: "Casos ativos e concluidos",
-  },
-  {
-    nome: "Relatorio de orcamentos",
-    href: "/relatorios?modulo=relatorio-orcamentos",
-    detalhe: "Aprovacoes e pendencias",
-  },
+const periodos: Array<{ valor: Periodo; rotulo: string }> = [
+  { valor: "30", rotulo: "Últimos 30 dias" },
+  { valor: "90", rotulo: "Últimos 90 dias" },
+  { valor: "365", rotulo: "Últimos 12 meses" },
+  { valor: "tudo", rotulo: "Todo o período" },
 ];
 
-function getTituloModulo(slug: string) {
-  return slug
-    .split("-")
-    .map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1))
-    .join(" ");
+const nomesMeses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function dentroDoPeriodo(data: string | undefined, periodo: Periodo) {
+  if (periodo === "tudo") return true;
+  if (!data) return false;
+  const momento = new Date(`${data.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(momento.getTime())) return false;
+  const limite = new Date();
+  limite.setDate(limite.getDate() - Number(periodo));
+  return momento >= limite;
 }
 
-function getStatusClasse(status: string) {
-  if (status === "Urgente") {
-    return "bg-red-100 text-red-700";
-  }
-
-  if (status === "Em andamento") {
-    return "bg-amber-100 text-amber-700";
-  }
-
-  if (status === "Planejado") {
-    return "bg-cyan-100 text-cyan-700";
-  }
-
-  if (status === "Concluído") {
-    return "bg-emerald-100 text-emerald-700";
-  }
-
-  return "bg-slate-100 text-slate-700";
+function porcentagem(parte: number, total: number) {
+  return total > 0 ? Math.round((parte / total) * 100) : 0;
 }
 
-export default async function Relatorios({ searchParams }: RelatoriosProps) {
-  const params = searchParams ? await searchParams : {};
-  const modulo = params.modulo || "";
-
-  if (modulo) {
-    return (
-      <main className="min-h-screen bg-slate-50 text-slate-900">
-        <div className="flex min-h-screen">
-          <Sidebar active="Relatorios" />
-          <section className="min-w-0 flex-1 p-6">
-            <ModuloEmPreparacao
-              titulo={getTituloModulo(modulo)}
-              descricao={
-                modulosEmPreparacao[modulo] ||
-                "Este modulo esta reservado no mapa do Clini+ e sera evoluido sem quebrar a navegacao atual."
-              }
-              hrefBotao="/relatorios"
-              textoBotao="Voltar aos relatorios"
-            />
-          </section>
-        </div>
-      </main>
-    );
-  }
-
-  const pacientesAtivos = pacientes.filter(
-    (paciente) =>
-      paciente.status === "Ativo" ||
-      paciente.status === "Em tratamento" ||
-      paciente.status === "Retorno pendente"
-  ).length;
-
-  const retornosPendentes = pacientes.filter(
-    (paciente) => paciente.status === "Retorno pendente"
-  ).length;
-
-  const consultasConfirmadas = consultas.filter(
-    (consulta) => consulta.status === "Confirmado"
-  ).length;
-
-  const consultasPendentes = consultas.filter(
-    (consulta) =>
-      consulta.status === "Pendente" || consulta.status === "Aguardando"
-  ).length;
-
-  const receitas = lancamentos.filter(
-    (lancamento) => lancamento.tipo === "Receita"
+function exportarCsv(lancamentos: CliniplusLancamentoFinanceiro[]) {
+  const cabecalho = ["Data", "Tipo", "Descrição", "Paciente", "Valor", "Status", "Origem"];
+  const linhas = lancamentos.map((item) =>
+    [item.data, item.tipo, item.descricao, item.paciente || "", item.valor, item.status, item.origem || ""]
+      .map((campo) => `"${String(campo).replace(/"/g, '""')}"`)
+      .join(";")
   );
+  const blob = new Blob([`\ufeff${[cabecalho.join(";"), ...linhas].join("\n")}`], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "lancamentos-cliniplus.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
-  const despesas = lancamentos.filter(
-    (lancamento) => lancamento.tipo === "Despesa"
+function Indicador({ titulo, valor, detalhe, cor = "text-slate-950" }: { titulo: string; valor: string | number; detalhe: string; cor?: string }) {
+  return (
+    <div className="rounded-3xl bg-white p-6 shadow-sm">
+      <p className="text-sm text-slate-500">{titulo}</p>
+      <h3 className={`mt-3 text-3xl font-bold ${cor}`}>{valor}</h3>
+      <p className="mt-2 text-xs text-slate-500">{detalhe}</p>
+    </div>
   );
+}
 
-  const particulares = lancamentos.filter(
-    (lancamento) => lancamento.origem === "Particular"
+function Barra({ rotulo, valor, maximo, texto, cor }: { rotulo: string; valor: number; maximo: number; texto: string; cor: string }) {
+  const largura = maximo > 0 ? Math.max((valor / maximo) * 100, valor > 0 ? 4 : 0) : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-semibold text-slate-700">{rotulo}</span>
+        <span className="text-slate-500">{texto}</span>
+      </div>
+      <div className="mt-2 h-3 rounded-full bg-slate-100">
+        <div className={`h-3 rounded-full ${cor}`} style={{ width: `${largura}%` }} />
+      </div>
+    </div>
   );
+}
 
-  const pagamentosPendentes = lancamentos.filter(
-    (lancamento) => lancamento.status === "Pendente"
-  );
+export default function Relatorios() {
+  const [periodo, setPeriodo] = useState<Periodo>("90");
+  const [dados, setDados] = useState<Dados>({
+    pacientes: [],
+    agendamentos: [],
+    financeiro: [],
+    tratamentos: [],
+    orcamentos: [],
+  });
 
-  const aguardandoConvenio = lancamentos.filter(
-    (lancamento) => lancamento.status === "Aguardando convênio"
-  );
+  useEffect(() => {
+    function carregar() {
+      setDados({
+        pacientes: getPacientes(),
+        agendamentos: getAgendamentos(),
+        financeiro: getLancamentosFinanceiros(),
+        tratamentos: getTratamentos(),
+        orcamentos: getOrcamentos(),
+      });
+    }
 
-  const recebidosConvenio = lancamentos.filter(
-    (lancamento) => lancamento.status === "Recebido do convênio"
-  );
+    carregar();
+    window.addEventListener("cliniplus:store", carregar);
+    return () => window.removeEventListener("cliniplus:store", carregar);
+  }, []);
 
-  const recusadosConvenio = lancamentos.filter(
-    (lancamento) => lancamento.status === "Glosado"
-  );
+  const relatorio = useMemo(() => {
+    const agendamentos = dados.agendamentos.filter((item) => dentroDoPeriodo(item.data, periodo));
+    const financeiro = dados.financeiro.filter((item) => dentroDoPeriodo(item.data, periodo));
+    const orcamentos = dados.orcamentos.filter((item) => dentroDoPeriodo(item.criadoEm, periodo));
 
-  const pendenciasFinanceiras =
-    pagamentosPendentes.length + aguardandoConvenio.length + recusadosConvenio.length;
+    const pago = (item: CliniplusLancamentoFinanceiro) => ["pago", "recebido do convenio"].includes(normalizarTexto(item.status));
+    const receitas = financeiro.filter((item) => item.tipo === "Receita");
+    const despesas = financeiro.filter((item) => item.tipo === "Despesa");
+    const somar = (lista: CliniplusLancamentoFinanceiro[]) => lista.reduce((total, item) => total + dinheiroParaNumero(item.valor), 0);
+
+    const statusAgenda = (status: string) => agendamentos.filter((item) => normalizarTexto(item.status).includes(status)).length;
+    const cancelados = statusAgenda("cancel");
+
+    const tratamentosPorStatus = new Map<string, number>();
+    dados.tratamentos.forEach((item) => {
+      const chave = item.status || "Sem status";
+      tratamentosPorStatus.set(chave, (tratamentosPorStatus.get(chave) || 0) + 1);
+    });
+
+    const procedimentos = new Map<string, number>();
+    [...dados.tratamentos.map((item) => item.descricao), ...agendamentos.map((item) => item.procedimento)]
+      .filter((nome): nome is string => Boolean(nome && nome.trim()))
+      .forEach((nome) => procedimentos.set(nome.trim(), (procedimentos.get(nome.trim()) || 0) + 1));
+
+    const hoje = new Date();
+    const meses = Array.from({ length: 6 }, (_, indice) => {
+      const data = new Date(hoje.getFullYear(), hoje.getMonth() - (5 - indice), 1);
+      const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+      const doMes = dados.financeiro.filter((item) => item.tipo === "Receita" && pago(item) && (item.data || "").startsWith(chave));
+      return { rotulo: `${nomesMeses[data.getMonth()]}/${String(data.getFullYear()).slice(2)}`, valor: somar(doMes) };
+    });
+
+    const aprovados = orcamentos.filter((item) => item.status === "aprovado");
+    const enviados = orcamentos.filter((item) => item.status === "enviado");
+
+    return {
+      lancamentos: financeiro,
+      pacientesAtivos: dados.pacientes.filter((item) => ["ativo", "em tratamento", "retorno pendente"].includes(normalizarTexto(item.status))).length,
+      retornosPendentes: dados.pacientes.filter((item) => normalizarTexto(item.status).includes("retorno")).length,
+      pacientesHof: dados.pacientes.filter((item) => item.tipoAtendimento === "estetica").length,
+      totalAgendamentos: agendamentos.length,
+      confirmados: statusAgenda("confirm"),
+      cancelados,
+      taxaCancelamento: porcentagem(cancelados, agendamentos.length),
+      receitaRecebida: somar(receitas.filter(pago)),
+      receitaPendente: somar(receitas.filter((item) => !pago(item) && normalizarTexto(item.status) !== "glosado")),
+      despesasPagas: somar(despesas.filter(pago)),
+      glosado: somar(receitas.filter((item) => normalizarTexto(item.status) === "glosado")),
+      meses,
+      tratamentosPorStatus: [...tratamentosPorStatus.entries()].sort((a, b) => b[1] - a[1]),
+      procedimentos: [...procedimentos.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6),
+      orcamentosAprovados: aprovados.length,
+      orcamentosEnviados: enviados.length,
+      valorAprovado: aprovados.reduce((total, item) => total + (item.total || 0), 0),
+      conversao: porcentagem(aprovados.length, aprovados.length + enviados.length),
+    };
+  }, [dados, periodo]);
+
+  const saldo = relatorio.receitaRecebida - relatorio.despesasPagas;
+  const maiorMes = Math.max(...relatorio.meses.map((mes) => mes.valor), 0);
+  const maiorProcedimento = relatorio.procedimentos[0]?.[1] || 0;
+  const maiorStatus = relatorio.tratamentosPorStatus[0]?.[1] || 0;
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="flex min-h-screen">
         <Sidebar active="Relatórios" />
 
-        <section className="min-w-0 flex-1 p-6">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <section className="flex-1 p-8">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
             <div>
               <h2 className="text-3xl font-bold">Relatórios</h2>
-              <p className="mt-1 text-slate-500">
-                Acompanhe resultados da clínica, pacientes, atendimentos,
-                tratamentos, financeiro e convênios
-              </p>
+              <p className="mt-1 text-slate-500">Indicadores calculados com os dados cadastrados na clínica.</p>
             </div>
-
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <select
+                value={periodo}
+                onChange={(event) => setPeriodo(event.target.value as Periodo)}
+                className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none"
+              >
+                {periodos.map((item) => (
+                  <option key={item.valor} value={item.valor}>
+                    {item.rotulo}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
-                className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700"
+                onClick={() => exportarCsv(relatorio.lancamentos)}
+                disabled={relatorio.lancamentos.length === 0}
+                className="h-12 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white disabled:opacity-40"
               >
-                Exportar PDF
-              </button>
-
-              <button
-                type="button"
-                className="rounded-xl bg-cyan-600 px-5 py-3 font-semibold text-white"
-              >
-                Gerar relatório
+                Exportar financeiro (CSV)
               </button>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-5 md:grid-cols-4">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Receita do mês</p>
-              <h3 className="mt-3 text-3xl font-bold">R$ 18.450</h3>
-              <p className="mt-1 text-xs text-emerald-600">
-                +18% comparado ao mês anterior
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Atendimentos</p>
-              <h3 className="mt-3 text-3xl font-bold">{consultas.length}</h3>
-              <p className="mt-1 text-xs text-cyan-600">
-                Consultas e procedimentos
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Pacientes ativos</p>
-              <h3 className="mt-3 text-3xl font-bold">{pacientesAtivos}</h3>
-              <p className="mt-1 text-xs text-emerald-600">
-                Em acompanhamento
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Pendências</p>
-              <h3 className="mt-3 text-3xl font-bold">{pendenciasFinanceiras}</h3>
-              <p className="mt-1 text-xs text-red-600">
-                Financeiro ou convênio
-              </p>
-            </div>
+          <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <Indicador titulo="Receita recebida" valor={formatarMoeda(relatorio.receitaRecebida)} detalhe="Pagos e repasses de convênio" cor="text-emerald-600" />
+            <Indicador titulo="A receber" valor={formatarMoeda(relatorio.receitaPendente)} detalhe="Pendentes e aguardando convênio" cor="text-amber-600" />
+            <Indicador titulo="Despesas pagas" valor={formatarMoeda(relatorio.despesasPagas)} detalhe={relatorio.glosado > 0 ? `${formatarMoeda(relatorio.glosado)} glosados` : "Sem glosas no período"} cor="text-red-600" />
+            <Indicador titulo="Saldo" valor={formatarMoeda(saldo)} detalhe="Receita recebida menos despesas" cor={saldo >= 0 ? "text-slate-950" : "text-red-600"} />
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {cardsRelatorios.map((card) => (
-              <Link
-                key={card.nome}
-                href={card.href}
-                className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50"
-              >
-                <p className="text-sm font-bold text-slate-900">{card.nome}</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">
-                  {card.detalhe}
-                </p>
+          <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <Indicador titulo="Pacientes ativos" valor={relatorio.pacientesAtivos} detalhe={`${relatorio.pacientesHof} em acompanhamento de HOF`} />
+            <Indicador titulo="Retornos pendentes" valor={relatorio.retornosPendentes} detalhe="Pacientes para chamar de volta" />
+            <Indicador titulo="Agendamentos" valor={relatorio.totalAgendamentos} detalhe={`${relatorio.confirmados} confirmados no período`} />
+            <Indicador titulo="Cancelamentos" valor={`${relatorio.taxaCancelamento}%`} detalhe={`${relatorio.cancelados} agendamentos cancelados`} />
+          </div>
+
+          <div className="mt-8 grid gap-6 xl:grid-cols-3">
+            <div className="rounded-3xl bg-white p-6 shadow-sm xl:col-span-2">
+              <h3 className="text-xl font-bold">Receita recebida por mês</h3>
+              <p className="mt-1 text-sm text-slate-500">Últimos 6 meses, considerando lançamentos pagos.</p>
+              <div className="mt-6 flex h-56 items-end gap-3">
+                {relatorio.meses.map((mes) => (
+                  <div key={mes.rotulo} className="flex flex-1 flex-col items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {mes.valor > 0 ? formatarMoeda(mes.valor).replace(",00", "") : ""}
+                    </span>
+                    <div
+                      className="w-full rounded-t-xl bg-cyan-500"
+                      style={{ height: `${maiorMes > 0 ? Math.max((mes.valor / maiorMes) * 160, mes.valor > 0 ? 6 : 2) : 2}px` }}
+                    />
+                    <span className="text-xs font-semibold text-slate-600">{mes.rotulo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-bold">Orçamentos</h3>
+              <p className="mt-1 text-sm text-slate-500">Criados no período selecionado.</p>
+              <div className="mt-6 space-y-4 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Aprovados</span><strong>{relatorio.orcamentosAprovados}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500">Aguardando aprovação</span><strong>{relatorio.orcamentosEnviados}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500">Valor aprovado</span><strong>{formatarMoeda(relatorio.valorAprovado)}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500">Taxa de conversão</span><strong>{relatorio.conversao}%</strong></div>
+              </div>
+              <Link href="/orcamentos" className="mt-6 block rounded-xl bg-slate-100 px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                Ver orçamentos
               </Link>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-5 md:grid-cols-4">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Receitas registradas</p>
-              <h3 className="mt-3 text-3xl font-bold">{receitas.length}</h3>
-              <p className="mt-1 text-xs text-emerald-600">
-                Entradas financeiras
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Despesas</p>
-              <h3 className="mt-3 text-3xl font-bold">{despesas.length}</h3>
-              <p className="mt-1 text-xs text-red-600">Custos cadastrados</p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Particulares</p>
-              <h3 className="mt-3 text-3xl font-bold">{particulares.length}</h3>
-              <p className="mt-1 text-xs text-cyan-600">
-                Pagamentos diretos
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Retornos pendentes</p>
-              <h3 className="mt-3 text-3xl font-bold">{retornosPendentes}</h3>
-              <p className="mt-1 text-xs text-amber-600">
-                Pacientes para acompanhar
-              </p>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-5 xl:grid-cols-3">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm xl:col-span-2">
-              <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                <div>
-                  <h3 className="text-xl font-bold">Desempenho mensal</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Evolução de receita e volume de atendimentos
-                  </p>
-                </div>
-
-                <select className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none">
-                  <option>Últimos 6 meses</option>
-                  <option>Este mês</option>
-                  <option>Este trimestre</option>
-                  <option>Este ano</option>
-                </select>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {desempenhoMes.map((item) => (
-                  <div key={item.mes}>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-semibold">{item.mes}/2026</p>
-                        <p className="text-xs text-slate-500">
-                          {item.atendimentos} atendimentos
-                        </p>
-                      </div>
-
-                      <strong>{item.receita}</strong>
-                    </div>
-
-                    <div className="h-3 rounded-full bg-slate-100">
-                      <div
-                        className="h-3 rounded-full bg-cyan-500"
-                        style={{
-                          width:
-                            item.mes === "Jan"
-                              ? "45%"
-                              : item.mes === "Fev"
-                                ? "52%"
-                                : item.mes === "Mar"
-                                  ? "61%"
-                                  : item.mes === "Abr"
-                                    ? "72%"
-                                    : item.mes === "Mai"
-                                      ? "84%"
-                                      : "96%",
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                <h3 className="text-xl font-bold">Convênios</h3>
-
-                <div className="mt-5 space-y-4">
-                  <div className="rounded-2xl bg-amber-50 p-4">
-                    <p className="font-semibold text-amber-700">
-                      {aguardandoConvenio.length} aguardando repasse
-                    </p>
-                    <p className="mt-1 text-sm text-amber-700">
-                      Guias enviadas e ainda não recebidas.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-emerald-50 p-4">
-                    <p className="font-semibold text-emerald-700">
-                      {recebidosConvenio.length} recebidos
-                    </p>
-                    <p className="mt-1 text-sm text-emerald-700">
-                      Repasses já confirmados.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-red-50 p-4">
-                    <p className="font-semibold text-red-700">
-                      {recusadosConvenio.length} recusados
-                    </p>
-                    <p className="mt-1 text-sm text-red-600">
-                      Guias glosadas pelo convênio.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-                <h3 className="text-xl font-bold text-emerald-800">
-                  Saúde da clínica
-                </h3>
-
-                <p className="mt-2 text-sm text-emerald-700">
-                  A clínica está com boa movimentação, mas precisa acompanhar
-                  convênios em aberto e retornos pendentes.
-                </p>
-
-                <Link
-                  href="/financeiro"
-                  className="mt-5 inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-700"
-                >
-                  Ver financeiro
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-5 xl:grid-cols-3">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <h3 className="text-xl font-bold">Procedimentos mais realizados</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Volume por tipo de procedimento odontológico
-              </p>
-
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="rounded-3xl bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-bold">Procedimentos mais frequentes</h3>
               <div className="mt-6 space-y-5">
-                {procedimentos.map((procedimento) => (
-                  <div key={procedimento.nome}>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <p className="font-semibold">{procedimento.nome}</p>
-                      <span className="text-slate-500">
-                        {procedimento.quantidade}
-                      </span>
-                    </div>
-
-                    <div className="h-2 rounded-full bg-slate-100">
-                      <div
-                        className={`h-2 rounded-full ${procedimento.cor}`}
-                        style={{ width: procedimento.porcentagem }}
-                      />
-                    </div>
-                  </div>
+                {relatorio.procedimentos.map(([nome, quantidade]) => (
+                  <Barra key={nome} rotulo={nome} valor={quantidade} maximo={maiorProcedimento} texto={`${quantidade}x`} cor="bg-emerald-500" />
                 ))}
+                {relatorio.procedimentos.length === 0 && (
+                  <p className="text-sm text-slate-500">Nenhum procedimento registrado ainda.</p>
+                )}
               </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <h3 className="text-xl font-bold">Tratamentos em andamento</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Casos clínicos que precisam de acompanhamento
-              </p>
-
-              <div className="mt-6 space-y-4">
-                {tratamentos.map((tratamento) => (
-                  <div
-                    key={tratamento.paciente}
-                    className="rounded-2xl bg-slate-50 p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{tratamento.paciente}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {tratamento.tratamento}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasse(
-                          tratamento.status
-                        )}`}
-                      >
-                        {tratamento.status}
-                      </span>
-                    </div>
-
-                    <p className="mt-3 text-sm font-semibold text-slate-700">
-                      {tratamento.valor}
-                    </p>
-                  </div>
+            <div className="rounded-3xl bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-bold">Tratamentos por status</h3>
+              <div className="mt-6 space-y-5">
+                {relatorio.tratamentosPorStatus.map(([status, quantidade]) => (
+                  <Barra key={status} rotulo={status} valor={quantidade} maximo={maiorStatus} texto={String(quantidade)} cor="bg-indigo-500" />
                 ))}
+                {relatorio.tratamentosPorStatus.length === 0 && (
+                  <p className="text-sm text-slate-500">Nenhum tratamento registrado ainda.</p>
+                )}
               </div>
+              <Link href="/tratamentos" className="mt-6 block rounded-xl bg-slate-100 px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                Ver tratamentos
+              </Link>
             </div>
-
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-              <h3 className="text-xl font-bold">Resumo operacional</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Indicadores rápidos da clínica
-              </p>
-
-              <div className="mt-6 space-y-4">
-                <div className="flex justify-between rounded-2xl bg-slate-50 p-4">
-                  <span className="text-sm text-slate-500">
-                    Consultas confirmadas
-                  </span>
-                  <strong>{consultasConfirmadas}</strong>
-                </div>
-
-                <div className="flex justify-between rounded-2xl bg-slate-50 p-4">
-                  <span className="text-sm text-slate-500">
-                    Consultas pendentes
-                  </span>
-                  <strong>{consultasPendentes}</strong>
-                </div>
-
-                <div className="flex justify-between rounded-2xl bg-slate-50 p-4">
-                  <span className="text-sm text-slate-500">
-                    Pacientes cadastrados
-                  </span>
-                  <strong>{pacientes.length}</strong>
-                </div>
-
-                <div className="flex justify-between rounded-2xl bg-slate-50 p-4">
-                  <span className="text-sm text-slate-500">
-                    Pendências financeiras
-                  </span>
-                  <strong>{pendenciasFinanceiras}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-5 lg:grid-cols-3">
-            <PremiumCard
-              title="Exportar PDF"
-              description="Gere relatórios profissionais para análise, prestação de contas e acompanhamento interno."
-            />
-
-            <PremiumCard
-              title="Exportar Excel"
-              description="Exporte dados em planilhas para contabilidade, conferência interna e gestão."
-            />
-
-            <PremiumCard
-              title="Relatório por convênio"
-              description="Veja guias, autorizações, repasses, recusas e produtividade por plano de saúde."
-            />
           </div>
         </section>
       </div>

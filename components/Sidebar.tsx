@@ -10,12 +10,15 @@ import {
   Folder,
   HeartPulse,
   House,
+  type LucideIcon,
   MessageCircle,
+  Receipt,
+  ScanFace,
   Settings,
   Users,
   Wallet,
-  type LucideIcon,
 } from "lucide-react";
+import { normalizarTexto } from "@/utils/format";
 
 type PlanoSlug = "starter" | "pro" | "premium";
 
@@ -36,6 +39,8 @@ const menuItems: MenuItem[] = [
   { name: "Pacientes", href: "/pacientes", icon: Users },
   { name: "Prontuários", href: "/prontuario", icon: ClipboardList },
   { name: "Tratamentos", href: "/tratamentos", icon: HeartPulse },
+  { name: "HOF", href: "/estetica-odontologica", icon: ScanFace },
+  { name: "Orçamentos", href: "/orcamentos", icon: Receipt },
   { name: "Financeiro", href: "/financeiro", icon: Wallet },
   { name: "Comunicação", href: "/comunicacao", icon: MessageCircle },
   { name: "Documentos", href: "/documentos", icon: Folder },
@@ -49,15 +54,10 @@ const activeAliases: Record<string, string[]> = {
   Financeiro: ["Visao geral financeira"],
   Relatórios: ["Relatorios"],
   Comunicação: ["Comunicacao"],
+  Orçamentos: ["Orcamentos"],
+  HOF: ["Estetica", "Estetica odontologica"],
   Configurações: ["Configuracoes"],
 };
-
-function normalizarTexto(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
 
 function isItemActive(
   pathname: string,
