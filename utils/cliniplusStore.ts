@@ -1,6 +1,12 @@
-import { consultas } from "@/data/consultas";
-import { lancamentos } from "@/data/financeiro";
-import { pacientes as pacientesSeed } from "@/data/pacientes";
+import {
+  demoAgendamentos,
+  demoDocumentos,
+  demoFinanceiro,
+  demoOrcamentos,
+  demoPacientes,
+  demoProcedimentosHof,
+  demoTratamentos,
+} from "@/data/demo";
 import { hojeIso, dataIsoLocal } from "@/utils/datas";
 import { idDaReferencia, removerArquivo, removerArquivosDoPaciente } from "@/utils/arquivos";
 
@@ -472,135 +478,23 @@ function readValue<T>(key: string, fallback: T): T {
 }
 
 function seedPacientes(): CliniplusPaciente[] {
-  return pacientesSeed.map((paciente) => ({ ...paciente }));
-}
-
-function getPacienteIdByName(nome?: string) {
-  if (!nome) {
-    return undefined;
-  }
-
-  return seedPacientes().find((paciente) => paciente.nome === nome)?.id;
+  return demoPacientes();
 }
 
 function seedAgendamentos(): CliniplusAgendamento[] {
-  return consultas.map((consulta) => {
-    const pacienteId = getPacienteIdByName(consulta.paciente) ?? consulta.id;
-
-    return {
-      id: consulta.id,
-      pacienteId,
-      paciente: consulta.paciente,
-      tipo: consulta.tipo,
-      data: "2026-06-24",
-      hora: consulta.hora,
-      duracao: "45 min",
-      sala: "Consultorio 01",
-      prioridade: consulta.status === "Aguardando" ? "Urgente" : "Normal",
-      status: consulta.status,
-      procedimento: consulta.tipo,
-      observacoes: "",
-    };
-  });
+  return demoAgendamentos();
 }
 
 function seedTratamentos(): CliniplusTratamento[] {
-  return [
-    {
-      id: 1,
-      pacienteId: 1,
-      paciente: "Maria Silva",
-      descricao: "Restauracao",
-      status: "Em andamento",
-      valor: "R$ 280",
-      data: "2026-06-24",
-    },
-    {
-      id: 2,
-      pacienteId: 1,
-      paciente: "Maria Silva",
-      descricao: "Clareamento",
-      status: "Planejado",
-      valor: "R$ 450",
-      data: "2026-06-28",
-    },
-    {
-      id: 3,
-      pacienteId: 2,
-      paciente: "Joao Almeida",
-      descricao: "Tratamento de canal",
-      status: "Urgente",
-      valor: "R$ 750",
-      data: "2026-06-22",
-    },
-  ];
+  return demoTratamentos();
 }
 
 function seedFinanceiro(): CliniplusLancamentoFinanceiro[] {
-  return lancamentos.map((lancamento) => ({
-    ...lancamento,
-    pacienteId: getPacienteIdByName(lancamento.paciente),
-    data: "2026-06-24",
-  }));
+  return demoFinanceiro();
 }
 
 function seedDocumentos(): CliniplusDocumento[] {
-  return [
-    {
-      id: 1,
-      pacienteId: 1,
-      paciente: "Maria Silva",
-      nome: "Radiografia panoramica",
-      categoria: "Exames de imagem",
-      tipo: "pdf",
-      data: "2026-06-12",
-      dataEnvio: "2026-06-12",
-      horaEnvio: "14:30",
-      formato: "PDF",
-      extensao: "PDF",
-      tamanho: "2.4 MB",
-      origem: "Odontologia",
-      enviadoPor: "Dr. Rafael Oliveira",
-      status: "ativo",
-      criadoEm: "2026-06-12T14:30:00.000Z",
-    },
-    {
-      id: 2,
-      pacienteId: 1,
-      paciente: "Maria Silva",
-      nome: "Foto intraoral inicial",
-      categoria: "Exames de imagem",
-      tipo: "imagem",
-      data: "2026-06-12",
-      dataEnvio: "2026-06-12",
-      horaEnvio: "15:10",
-      formato: "JPG",
-      extensao: "JPG",
-      tamanho: "1.8 MB",
-      origem: "Odontologia",
-      enviadoPor: "Dr. Rafael Oliveira",
-      status: "ativo",
-      criadoEm: "2026-06-12T15:10:00.000Z",
-    },
-    {
-      id: 3,
-      pacienteId: 3,
-      paciente: "Ana Costa",
-      nome: "Termo de consentimento HOF",
-      categoria: "Consentimentos",
-      tipo: "pdf",
-      data: "2026-06-08",
-      dataEnvio: "2026-06-08",
-      horaEnvio: "09:00",
-      formato: "PDF",
-      extensao: "PDF",
-      tamanho: "0.9 MB",
-      origem: "Estetica / HOF",
-      enviadoPor: "Dra. Juliana Pires",
-      status: "assinado",
-      criadoEm: "2026-06-08T09:00:00.000Z",
-    },
-  ];
+  return demoDocumentos();
 }
 
 export function getPacientes() {
@@ -1143,7 +1037,7 @@ function createOrcamentoNumero() {
 }
 
 export function getOrcamentos() {
-  return readList<CliniplusOrcamento>(keys.orcamentos, []);
+  return readList<CliniplusOrcamento>(keys.orcamentos, demoOrcamentos());
 }
 
 export function getOrcamentosByPacienteId(pacienteId: StoreId) {
@@ -1935,7 +1829,7 @@ export type CliniplusProcedimentoHof = {
 };
 
 export function getProcedimentosHof(pacienteId?: StoreId) {
-  const lista = readList<CliniplusProcedimentoHof>(keys.hof, []);
+  const lista = readList<CliniplusProcedimentoHof>(keys.hof, demoProcedimentosHof());
   return pacienteId === undefined ? lista : lista.filter((item) => sameId(item.pacienteId, pacienteId));
 }
 
