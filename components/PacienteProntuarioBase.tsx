@@ -1305,7 +1305,7 @@ function getPlanoFromParams(
     return "starter";
   }
 
-  return (searchParams.get("plano") || sessao?.plano || "starter").toLowerCase();
+  return (searchParams.get("plano") || sessao?.plano || "premium").toLowerCase();
 }
 
 function EmptyState({ text = "Nenhum dado registrado ainda." }: { text?: string }) {

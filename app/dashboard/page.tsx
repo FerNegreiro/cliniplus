@@ -79,7 +79,8 @@ const dadosVazios: DashboardData = {
 };
 
 function normalizarPlano(valor: string | null | undefined): PlanoSlug {
-  return valor === "pro" || valor === "premium" ? valor : "starter";
+  if (!valor) return "premium";
+  return valor === "pro" || valor === "starter" ? valor : "premium";
 }
 
 function lancamentoPago(item: CliniplusLancamentoFinanceiro) {

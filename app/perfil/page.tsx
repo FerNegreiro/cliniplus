@@ -28,12 +28,12 @@ const campo = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-
 
 export default function Perfil() {
   const [perfil, setPerfil] = useState<PerfilUsuario>(perfilPadrao);
-  const [plano, setPlano] = useState("starter");
+  const [plano, setPlano] = useState("premium");
   const [mensagem, setMensagem] = useState({ texto: "", erro: false });
 
   useEffect(() => {
     setPerfil(getPerfil());
-    setPlano(getSessaoPlano()?.plano || "starter");
+    setPlano(getSessaoPlano()?.plano || "premium");
   }, []);
 
   function atualizar(campoPerfil: keyof PerfilUsuario, valor: string) {
