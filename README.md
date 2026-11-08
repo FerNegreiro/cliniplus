@@ -86,4 +86,4 @@ Toda leitura e gravação de dados passa pelo `utils/cliniplusStore.ts`, e os ar
 
 ---
 
-Desenvolvido por **Fernando Ivo Negreiro da Silva** · [GitHub](https://github.com/FerNegreiro)
+Desenvolvido por **Fernando Ivo Negreiro da Silva** · [LinkedIn](https://www.linkedin.com/in/fernando-negreiro-06a3582a2)
