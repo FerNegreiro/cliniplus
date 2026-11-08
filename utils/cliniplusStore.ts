@@ -2,6 +2,7 @@ import {
   demoAgendamentos,
   demoDocumentos,
   demoFinanceiro,
+  demoOdontograma,
   demoOrcamentos,
   demoPacientes,
   demoProcedimentosHof,
@@ -1314,7 +1315,7 @@ export function deleteEvolucao(id: StoreId) {
 }
 
 export function getOdontograma() {
-  return readList<CliniplusOdontogramaAnotacao>(keys.odontograma, []);
+  return readList<CliniplusOdontogramaAnotacao>(keys.odontograma, demoOdontograma());
 }
 
 export function getOdontogramaByPacienteId(pacienteId: StoreId) {

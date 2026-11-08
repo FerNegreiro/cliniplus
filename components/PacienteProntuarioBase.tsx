@@ -1582,7 +1582,7 @@ export default function PacienteProntuarioBase({
   const [visualizacaoOdontograma, setVisualizacaoOdontograma] =
     useState("Completa");
   const [mostrarLegendaOdontograma, setMostrarLegendaOdontograma] =
-    useState(false);
+    useState(true);
   const [mostrarHistoricoOdontograma, setMostrarHistoricoOdontograma] =
     useState(false);
   const [odontogramaDraft, setOdontogramaDraft] =

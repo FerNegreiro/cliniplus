@@ -104,7 +104,11 @@ function getDiasMesCalendario(valor: string) {
   });
 }
 
-function getDiasVisiveis(dataSelecionada: string, visualizacao: string) {
+function getDiasVisiveis(
+  dataSelecionada: string,
+  visualizacao: string,
+  temAtendimentoNoDomingo: (iso: string) => boolean = () => false
+) {
   if (visualizacao === "Dia") {
     const data = criarDataLocal(dataSelecionada);
     return [{ data, iso: formatarIso(data) }];
@@ -118,7 +122,10 @@ function getDiasVisiveis(dataSelecionada: string, visualizacao: string) {
   }
 
   const inicio = getInicioSemana(dataSelecionada);
-  return Array.from({ length: 6 }, (_, index) => {
+  const domingo = new Date(inicio);
+  domingo.setDate(inicio.getDate() + 6);
+  const incluirDomingo = criarDataLocal(dataSelecionada).getDay() === 0 || temAtendimentoNoDomingo(formatarIso(domingo));
+  return Array.from({ length: incluirDomingo ? 7 : 6 }, (_, index) => {
     const data = new Date(inicio);
     data.setDate(inicio.getDate() + index);
     return { data, iso: formatarIso(data) };
@@ -308,8 +315,13 @@ export default function Agenda() {
   }, [mensagem]);
 
   const diasVisiveis = useMemo(
-    () => getDiasVisiveis(dataSelecionada, visualizacao),
-    [dataSelecionada, visualizacao]
+    () =>
+      getDiasVisiveis(dataSelecionada, visualizacao, (iso) =>
+        agendamentos.some(
+          (item) => item.data === iso && normalizarStatus(item.status) !== "cancelado"
+        )
+      ),
+    [agendamentos, dataSelecionada, visualizacao]
   );
   const diasDoMes = useMemo(
     () => getDiasMesCalendario(dataSelecionada),
@@ -439,7 +451,7 @@ export default function Agenda() {
 
   const encaixes = agendamentosFiltrados.filter(
     (item) =>
-      normalizarStatus(item.status) === "aguardando" ||
+      item.encaixe ||
       normalizarTexto(item.prioridade).includes("encaixe") ||
       !getHorario(item)
   );

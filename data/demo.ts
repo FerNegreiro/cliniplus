@@ -2,6 +2,7 @@ import type {
   CliniplusAgendamento,
   CliniplusDocumento,
   CliniplusLancamentoFinanceiro,
+  CliniplusOdontogramaAnotacao,
   CliniplusOrcamento,
   CliniplusPaciente,
   CliniplusProcedimentoHof,
@@ -257,4 +258,41 @@ export function demoDocumentos(): CliniplusDocumento[] {
     doc(2, 7, "Documentação ortodôntica", "Exame", "pdf", -9, profissional),
     doc(3, 3, "Termo de consentimento - toxina botulínica", "Termo", "pdf", -7, hof),
   ] as CliniplusDocumento[];
+}
+
+export function demoOdontograma(): CliniplusOdontogramaAnotacao[] {
+  const criado = new Date().toISOString();
+  const anotacao = (
+    id: number,
+    pacienteId: number,
+    dente: string,
+    condicao: string,
+    status: string,
+    face: string,
+    observacao: string,
+    deslocamento: number
+  ): CliniplusOdontogramaAnotacao => ({
+    id: `odonto-${id}`,
+    pacienteId,
+    dente,
+    face,
+    condicao,
+    status,
+    observacao,
+    profissional,
+    data: dia(deslocamento),
+    criadoEm: criado,
+  });
+
+  return [
+    anotacao(1, 1, "16", "Restauração", "Executado", "Oclusal", "Restauração em resina composta.", -14),
+    anotacao(2, 1, "26", "Cárie", "Planejado", "Mesial", "Lesão de cárie inicial, restaurar na próxima sessão.", -14),
+    anotacao(3, 1, "36", "Tratamento de canal", "Executado", "Raiz", "Canal concluído em 2023.", -14),
+    anotacao(4, 1, "38", "Ausente", "Observação", "Geral", "Extraído anteriormente.", -14),
+    anotacao(5, 1, "46", "Implante", "Planejado", "Geral", "Avaliar implante após tomografia.", -14),
+    anotacao(6, 2, "36", "Tratamento de canal", "Em andamento", "Raiz", "Segunda sessão realizada.", -35),
+    anotacao(7, 2, "37", "Restauração", "Executado", "Oclusal", "", -35),
+    anotacao(8, 4, "38", "Extração indicada", "Planejado", "Geral", "Siso semi-incluso.", -20),
+    anotacao(9, 4, "26", "Restauração", "Executado", "Distal", "", -1),
+  ];
 }

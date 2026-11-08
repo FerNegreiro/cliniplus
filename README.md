@@ -2,7 +2,17 @@
 
 Sistema web para clínicas e consultórios odontológicos, com módulo de harmonização orofacial (HOF). Reúne agenda, pacientes, prontuário com odontograma, plano de tratamento, orçamentos, financeiro, comunicação pelo WhatsApp e relatórios.
 
-> **Status:** protótipo funcional. Os dados ficam salvos no navegador (`localStorage`), sem backend e sem login real. Veja [Limitações](#limitações).
+**[Acessar a demonstração](https://cliniplus-two.vercel.app)** · clique em "Entrar na demonstração". Não precisa de cadastro: os dados de exemplo se ajustam à data de hoje e ficam salvos só no seu navegador.
+
+![Início do Clini+](docs/dashboard.png)
+
+| Prontuário com odontograma | Agenda |
+|---|---|
+| ![Odontograma](docs/odontograma.png) | ![Agenda](docs/agenda.png) |
+
+![Módulo de HOF](docs/hof.png)
+
+> **Status:** protótipo funcional, sem backend e sem login real. Veja [Limitações](#limitações).
 
 ## Funcionalidades
 
